@@ -1,0 +1,1271 @@
+// @ts-nocheck
+import {
+  Page, Section, Text, Callout, BulletList, Steps, Table, Rows, Properties, Segmented, Select, Input, Button,
+  LineChart, Columns, CalendarHeatmap, DayView, Metrics, LinkCards, Fragment, useState, useEffect, useMemo, useGrokTheme,
+} from "./kit";
+
+type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
+type CheckKey = "wake" | "mobility" | "strength" | "speed" | "wedges" | "putting" | "sim" | "eighteen" | "nine" | "hips" | "hipmini" | "recovery" | "review" | "protein" | "water" | "screens" | "bed";
+type Tab = "today" | "drills" | "stretch" | "plan" | "phases" | "log" | "assess" | "food";
+type LogKind = "speed" | "ball" | "bench" | "trap" | "score18" | "score9" | "hcp";
+type DrillGroup = "Power" | "Golf" | "Hips";
+type RoutineKey = "daily" | "dailylift" | "warmup" | "sunday";
+interface Drill { id: string; group: DrillGroup; name: string; days: DayKey[]; when: string; time: string; reps: string; cue: string; pass: string; credit?: string; }
+interface GameDef { id: string; name: string; scoring: string; higher: boolean; days: DayKey[]; }
+interface RoundStats { score?: string; gir?: string; putts?: string; focus?: string; }
+interface Move { id: string; name: string; rounds: number; hold?: number; reps?: string; sides: boolean; secs: number; cue: string; area: string; }
+interface Routine { label: string; when: string; start: number; moves: Move[]; }
+interface Ex { name: string; dose: string; rest: string; load: string; min: number; }
+interface Session { name: string; key?: CheckKey; start: number; goal: string; items: Ex[]; }
+type Part = { kind: "stretch"; routine: RoutineKey; start: number } | { kind: "session"; s: Session };
+interface Block { s: number; e: number; t: string; k?: CheckKey; routine?: RoutineKey; }
+interface DayPlan { key: DayKey; focus: string; am: string; pm: string; checks: CheckKey[]; labels: Partial<Record<CheckKey, string>>; parts: Part[]; testing?: boolean; }
+interface DayRec { c: Partial<Record<CheckKey, boolean>>; energy?: number; focus?: number; notes?: string; win?: string; fix?: string; next?: string; stretch?: Record<string, boolean>; drills?: Record<string, boolean>; round?: RoundStats; }
+interface LogEntry { date: string; kind: LogKind; value: number; note?: string; }
+interface AssessRec { date: string; results: Record<string, string>; }
+interface GameRec { date: string; id: string; score: number; }
+interface TestRec { date: string; v: Record<string, string>; }
+interface Store { days: Record<string, DayRec>; logs: LogEntry[]; assess: AssessRec[]; games: GameRec[]; tests: TestRec[]; startDate?: string; seeded?: boolean; }
+
+const STORE_KEY = "golf-speed-plan-v1";
+const TZ = "America/New_York";
+// Current wall-clock time in New York, as a local Date (so getDay/getHours read NY time).
+function nyNow(): Date {
+  try { return new Date(new Date().toLocaleString("en-US", { timeZone: TZ })); } catch (_e) { return new Date(); }
+}
+
+const BASELINE_SWINGS = [
+  { label: "#1", value: 93.5 }, { label: "#2", value: 94.5 }, { label: "#3", value: 91.5 }, { label: "#4", value: 95 },
+  { label: "#5", value: 98 }, { label: "#6", value: 98 }, { label: "#7", value: 93 }, { label: "#8", value: 94 },
+];
+const BASELINE_NOTE = "Barefoot, indoors, air swings with no ball. On-course speed in shoes, hitting a ball, may read slightly different.";
+const SEED_LOG: LogEntry = { date: "2026-10-21", kind: "speed", value: 98, note: "Baseline: TheStack R-Speed max, GT2 driver, barefoot air swings" };
+
+const TESTING_DATES = ["2026-11-18", "2026-12-16", "2027-01-13", "2027-02-10"];
+const TEST_FIELDS: { id: string; label: string }[] = [
+  { id: "rspeed", label: "TheStack R-Speed max (mph, barefoot air swings)" },
+  { id: "rclub", label: "Rapsodo club speed with a ball (mph)" },
+  { id: "rball", label: "Rapsodo ball speed (mph)" },
+  { id: "broad", label: "Broad jump, best of 3 (inches)" },
+  { id: "rotL", label: "Rotational slam ball throw, left side (ft)" },
+  { id: "rotR", label: "Rotational slam ball throw, right side (ft)" },
+  { id: "chest", label: "Seated chest pass, best of 3 (ft)" },
+  { id: "toetouch", label: "Toe touch (fingertips to toes? or inches short)" },
+  { id: "aslrL", label: "Active straight-leg raise, left (degrees, phone angle app)" },
+  { id: "aslrR", label: "Active straight-leg raise, right (degrees)" },
+  { id: "mob", label: "Mobility score (note Pliability or GOWOD)" },
+];
+const BASELINE_TEST: TestRec = { date: "2026-10-21", v: { rspeed: "98" } };
+
+function mv(id: string, name: string, rounds: number, hold: number | undefined, reps: string | undefined, sides: boolean, secs: number | undefined, area: string, cue: string): Move {
+  const total = hold ? rounds * hold * (sides ? 2 : 1) : secs || 60;
+  return { id, name, rounds, hold, reps, sides, secs: total, cue, area };
+}
+function doseOf(m: Move): string {
+  if (m.hold) return `${m.rounds} x ${m.hold}s${m.sides ? "/side" : ""}`;
+  return `${m.rounds} x ${m.reps || ""}`;
+}
+const B1 = "Block 1 · Open up";
+const B2 = "Block 2 · Strengthen the range";
+const B3 = "Block 3 · Use it fast";
+const DAILY_MOVES: Move[] = [
+  mv("d9090", "90/90 hip switches", 2, undefined, "6/side, 2-breath hold at each end", true, 120, `${B1} · Hips`, "Tall chest; rotate knees side to side, breathe twice at end range."),
+  mv("spider", "Spiderman stretch with reach", 1, undefined, "5/side", true, 70, `${B1} · Hips + T-spine`, "Big lunge, hand inside the foot, then reach the same arm to the ceiling."),
+  mv("dbook", "Open books", 1, undefined, "5/side, 5-count hold", true, 75, `${B1} · Thoracic rotation`, "Knees stacked and pinned; hold 5 counts open, eyes follow the hand."),
+  mv("dham", "Banded lying hamstring stretch (30-45 s)", 2, 35, undefined, true, undefined, `${B1} · Hamstrings (tight)`, "Band around the foot, knee straight, ease in; hold 30-45 s, no bouncing."),
+  mv("aslr", "Banded active straight-leg raise", 2, undefined, "8/side, 3 s lowering", true, 80, `${B1} · Hamstrings (active range)`, "Lying, band loops the raised foot for a light assist; lift the straight leg with the other leg pinned down, lower over 3 s."),
+  mv("liftoff", "90/90 hip lift-offs", 2, undefined, "5/side, 3 s holds", true, 90, `${B2} · Hip rotation strength`, "In 90/90, lift the back knee and foot off the floor; hold 3 s."),
+  mv("bandir", "Seated banded hip internal rotation", 2, undefined, "12/side", true, 90, `${B2} · Hip internal rotation`, "Band around the ankle; knee stays still while the foot rotates out."),
+  mv("pallof", "Half-kneeling Pallof press with rotation", 2, undefined, "8/side", true, 90, `${B2} · Core anti-rotation`, "Press out, rotate the chest away from the anchor, come back slow."),
+  mv("slrdlslow", "Kettlebell single-leg RDL, slow lower", 2, undefined, "6/side, 3 s down", true, 110, `${B2} · Hamstrings + balance`, "Light KB; hips square, 3 s lowering builds strength through length. Drop this move if you are sore."),
+  mv("bander9090", "90/90 band external rotation", 2, undefined, "10/arm", true, 90, `${B2} · Shoulders`, "Elbow at shoulder height, rotate back to vertical and lower slowly."),
+  mv("stepover", "Banded lateral step-overs", 1, undefined, "10/side", true, 50, `${B3} · Hip stability`, "Mini band around calves, hands on hips, step over low blocks, hips level."),
+  mv("rotthrow", "Split-stance rotational slam ball throws", 2, undefined, "4/side", true, 120, `${B3} · Rotational power`, "Light slam ball into a wall; fast hips, then torso. Skip on Tue/Thu."),
+  mv("s2f", "Slow-to-fast swings, hold the finish", 1, undefined, "5 swings", false, 75, `${B3} · Swing speed`, "Start at half speed and build each swing; hold the finish for 3 s."),
+];
+const DAILY_LIFT_MOVES: Move[] = DAILY_MOVES.filter((m) => m.id !== "rotthrow");
+const WARMUP_MOVES: Move[] = [
+  mv("swingfb", "Leg swings, front to back", 1, undefined, "10/side", true, 30, "Hips + hamstrings", "Hold a wall; relaxed, growing range."),
+  mv("swingss", "Leg swings, side to side", 1, undefined, "10/side", true, 30, "Hip adductors", "Toes forward, swing across the body."),
+  mv("lungerot", "Reverse lunge with rotation", 1, undefined, "5/side", true, 45, "Hip flexors + T-spine", "Turn the chest over the front leg."),
+  mv("pullapart", "Band pull-apart", 1, undefined, "15 reps", false, 30, "Upper back", "Straight arms, squeeze shoulder blades."),
+  mv("wuer", "Band external rotation", 1, undefined, "10/side", true, 40, "Shoulders", "Elbow at side, smooth reps."),
+  mv("latwalk", "Band lateral walk (band above knees)", 1, undefined, "10 steps each way", false, 30, "Glute activation", "Knees push out, small steps, stay low."),
+  mv("halo", "Kettlebell halo (light KB)", 1, undefined, "5 each direction", false, 30, "Shoulders + T-spine", "Ribs down; circle the bell close to the head."),
+  mv("clubturn", "Club-across-shoulders turns", 1, undefined, "10/side", true, 30, "Thoracic rotation", "Golf posture, turn the chest, hips quiet."),
+  mv("buildup", "Build-up swings", 1, undefined, "5 swings, 50% to 80%", false, 35, "Swing", "Smooth; save max effort for the session."),
+];
+const SUNDAY_MOVES: Move[] = [
+  mv("gf", "GolfForever mobility session (pick one in the app)", 1, undefined, "8 min", false, 480, "Full body", "Easy range; follow the app's pace."),
+  mv("s9090", "90/90 hip switch", 2, 45, undefined, true, undefined, "Hip internal + external rotation", "Tall chest; pause 3 s at each end."),
+  mv("fig4", "Figure-4 stretch (lying)", 2, 30, undefined, true, undefined, "Hip external rotation", "Pull the uncrossed thigh toward you; back flat."),
+  mv("wiper", "Lying hip windshield wipers", 2, undefined, "10/side", true, 60, "Hip internal rotation", "Feet wide, drop both knees side to side slowly."),
+  mv("shipflex", "Half-kneeling hip flexor stretch", 2, 30, undefined, true, undefined, "Hip flexors", "Tuck pelvis, squeeze glute, reach the arm up."),
+  mv("sham", "Band hamstring stretch (lying)", 2, 30, undefined, true, undefined, "Hamstrings", "Knee straight; ease in, no bouncing."),
+  mv("thread", "Thread the needle", 2, 20, undefined, true, undefined, "Thoracic rotation", "Slide the arm under; let the shoulder sink."),
+  mv("childlat", "Child's pose side reach", 2, 30, undefined, true, undefined, "Lats", "Walk both hands to one side; breathe into the ribs."),
+  mv("sankle", "Knee-to-wall ankle rock", 2, undefined, "10/side", true, 90, "Ankles", "Heel down; move the foot back as it gets easy."),
+  mv("slbridge", "Single-leg glute bridge", 2, undefined, "8/side", true, 90, "Glute activation", "Hips level; push through the heel."),
+  mv("legswall", "Legs up the wall, slow breathing", 1, 120, undefined, false, undefined, "Recovery", "Breathe in 4 s, out 6 s."),
+];
+const ROUTINES: Record<RoutineKey, Routine> = {
+  daily: { label: "Daily mobility + strength (20 min)", when: "Every morning at 6:10; on TheStack days (Mon, Wed, Sat) it is your warm-up", start: 6 + 10 / 60, moves: DAILY_MOVES },
+  dailylift: { label: "Daily mobility + strength, lift-day version (18 min)", when: "Tue and Thu at 6:10; block 3 throws skipped because the strength primer has throws", start: 6 + 10 / 60, moves: DAILY_LIFT_MOVES },
+  warmup: { label: "5-min dynamic warm-up", when: "Before the Mon round (12:55) and Fri round (3:00), and on Testing Day", start: 12 + 55 / 60, moves: WARMUP_MOVES },
+  sunday: { label: "Sunday long stretch", when: "Sunday at 7:30, optional", start: 7.5, moves: SUNDAY_MOVES },
+};
+function routineSecs(r: RoutineKey): number { return ROUTINES[r].moves.reduce((a, m) => a + m.secs, 0); }
+function at(s: Omit<Session, "start">, start: number): Session { return { ...s, start }; }
+function sessMin(s: Session): number { return s.items.reduce((a, e) => a + e.min, 0); }
+
+const SPEED: Omit<Session, "start"> = {
+  name: "TheStack speed", key: "speed",
+  goal: "The 20-min daily routine plus the hip mini-block is your warm-up. Follow the TheStack app's session for your stage: full intent, full rest. Stop if speed falls off hard or anything pinches. Score: best club speed.",
+  items: [
+    { name: "Build-up swings", dose: "5 swings", rest: "15 s", load: "Driver or lightest Stack weight, 60% to 90%", min: 3 },
+    { name: "TheStack session as prescribed in the app", dose: "Per app", rest: "Per app (full rest between max swings)", load: "Stack weights for your stage", min: 20 },
+    { name: "Speed-to-course transfer on Rapsodo", dose: "5 max drives with a ball", rest: "30-60 s", load: "Driver, shoes on", min: 5 },
+    { name: "Log best club speed + ball speed", dose: "2 entries", rest: "-", load: "Log tab", min: 2 },
+  ],
+};
+const STRENGTH_A: Omit<Session, "start"> = {
+  name: "Strength A: trap bar + bench", key: "strength",
+  goal: "Injury safety: warm up first (daily routine + ramp-up sets), stop 2 reps short of failure, flat back on every hinge, no pain. Trap bar deadlift is the main hinge; the RDL stays light. Power primer first (19 min): max effort on every rep, full rest, stop a set when reps slow down. Then lift at RPE 6-7 and add weight only when every rep is clean. Hamstrings: add a little load or 1 rep every 1-2 weeks; stop if you cramp or feel sharp pain.",
+  items: [
+    { name: "Primer: light trap bar jump", dose: "3 x 3-5", rest: "90 s", load: "Empty trap bar or bar + 10 lb plates; max intent, soft landing", min: 5 },
+    { name: "Primer: lateral bound / skater", dose: "3 x 4/side", rest: "60 s", load: "Bodyweight; stick each landing 2 s", min: 4 },
+    { name: "Primer: single-leg RDL to knee drive + small hop", dose: "3 x 5/side", rest: "45 s", load: "Bodyweight weeks 1-2, then a light KB", min: 5 },
+    { name: "Primer: step-behind rotational shot-put throw", dose: "3 x 4/side", rest: "60 s", load: "6-10 lb slam ball into a wall, max intent", min: 5 },
+    { name: "Ramp-up sets (trap bar + bench)", dose: "2 x 5 each", rest: "30 s", load: "Empty bar", min: 3 },
+    { name: "Trap bar deadlift", dose: "3 x 5", rest: "2 min", load: "95-115 lb total in week 1, RPE 5-6; +10 lb/week", min: 9 },
+    { name: "Bench press (superset: RDL in the rest)", dose: "3 x 5", rest: "2 min", load: "90-95 lb (65-70% of 135), RPE 6-7; +5 lb/week", min: 10 },
+    { name: "Hamstrings: barbell Romanian deadlift, 3 s lowering", dose: "3 x 8", rest: "In bench rest (about 90 s)", load: "Bar + 10 lb total (5 lb per side), RPE 5; flat back, bar close to the legs, lower only to a hamstring stretch. +5-10 lb every 1-2 weeks only if form is perfect and no pain. Alternative: single 25-35 lb KB RDL, same rules", min: 4 },
+    { name: "Hamstrings: band-assisted eccentric Nordic curl (or slider/banded curl)", dose: "3 x 4-6", rest: "60 s", load: "Kneel on a pad, feet anchored; lower over 3-5 s with a band from above for help, push back up with hands. Slider curl if Nordics are too much", min: 5 },
+    { name: "Goblet lateral lunge", dose: "2 x 5-6/side", rest: "45 s", load: "Light KB (12-16 kg), sit into the hip", min: 4 },
+  ],
+};
+const STRENGTH_B: Omit<Session, "start"> = {
+  name: "Strength B: upper + rotational power (moderate legs)", key: "strength",
+  goal: "Injury safety: warm up first (daily routine + ramp-up sets), stop 2 reps short of failure, flat back, no pain. Round tomorrow, so lower-body volume is cut: 2 sets of jumps and light split squats. Upper body and rotational power stay full. Max effort on power reps, full rest.",
+  items: [
+    { name: "Primer: step-in overhead throw (Greg Rose lead-leg progression)", dose: "3 x 5", rest: "60 s", load: "6-10 lb slam ball; weeks 1-2 kneeling, 3-4 standing, then step-in", min: 4 },
+    { name: "Primer: golf-swing scoop toss into wall", dose: "3 x 4/side", rest: "60 s", load: "6-10 lb slam ball, max intent", min: 5 },
+    { name: "Primer: kneeling jump to squat (swap if knees/landing feel off)", dose: "2 x 4", rest: "60 s", load: "Bodyweight, pad under knees. Swaps, same 2 min: pause squat jump 2 x 4 (2 s pause at the bottom); countermovement jump 2 x 5 (stick the landing); light trap bar jump 2 x 4 (bar + about 20 lb); KB swing 2 x 8 (snap the hips); half-kneeling slam ball scoop toss 2 x 4/side (rotate from the hips)", min: 2 },
+    { name: "Primer: low box/bench jump holding slam ball", dose: "2 x 3", rest: "60 s", load: "Light slam ball; low box; step down", min: 2 },
+    { name: "Ramp-up bench sets", dose: "2 x 5", rest: "30 s", load: "Empty bar", min: 3 },
+    { name: "Bench press", dose: "3 x 6", rest: "2 min", load: "85-90 lb, RPE 6", min: 10 },
+    { name: "Seated/supine slam ball chest pass (in bench rest)", dose: "3 x 5", rest: "Rest of the 2 min", load: "6-10 lb slam ball, max intent", min: 2 },
+    { name: "Barbell bent-over row", dose: "3 x 8", rest: "90 s", load: "65-75 lb, flat back", min: 7 },
+    { name: "Barbell split squat (light)", dose: "2 x 6/side", rest: "90 s", load: "Bodyweight or empty bar, RPE 6 max", min: 5 },
+    { name: "Plyo push-up", dose: "3 x 5", rest: "60 s", load: "Hands on a bench to start; floor once easy", min: 3 },
+    { name: "Hamstrings: single-leg glute bridge or hamstring bridge walkouts", dose: "2 x 8/side (walkouts: 2 x 8 steps)", rest: "45 s", load: "Bodyweight only; no heavy hinge today (round tomorrow); lower slowly", min: 4 },
+  ],
+};
+const HIP_SAFETY = "Stop if you feel pinching or pain in the front of the hip.";
+const HIP_BLOCK: Omit<Session, "start"> = {
+  name: "Hip block (10 min)", key: "hips",
+  goal: `Active hip rotation and control, from the hip videos you shared. Slow, controlled reps. ${HIP_SAFETY}`,
+  items: [
+    { name: "Active half-kneeling hip internal rotation (skip if done in morning)", dose: "2 x 8/side, 2 s hold at end", rest: "-", load: "Bodyweight; pelvis still, feel the outer glute. If skipped, use the time for banded rockbacks 1 x 10/side", min: 2 },
+    { name: "Quadruped band-resisted hip internal rotation (skip if done in morning)", dose: "2 x 10/side", rest: "-", load: "Light band at the ankle; tuck tailbone slightly, no low-back twist. If skipped, use the time for the anti-valgus split squat 2 x 6/side", min: 2 },
+    { name: "Supine 90/90 active hip internal rotation (skip if done in morning)", dose: "2 x 10", rest: "-", load: "Bodyweight; knees together, feet fan out. If skipped, finish early", min: 2 },
+    { name: "Counterbalanced banded squat", dose: "2 x 8", rest: "-", load: "Mini band at knees, light KB or plate held out front; push knees out", min: 2 },
+    { name: "Copenhagen side plank on bench (short lever)", dose: "2 x 15-20 s/side", rest: "-", load: "Knee on bench first, progress to foot later", min: 2 },
+  ],
+};
+const HIP_MINI: Omit<Session, "start"> = {
+  name: "Daily hip mini-block (4 min)", key: "hipmini",
+  goal: `Right after the daily mobility routine, every day. 1 set each, slow and controlled. ${HIP_SAFETY}`,
+  items: [
+    { name: "Active half-kneeling hip internal rotation", dose: "1 x 8/side, 2 s hold at end", rest: "-", load: "Bodyweight; pelvis still, feel the outer glute", min: 1 },
+    { name: "Quadruped band-resisted hip internal rotation", dose: "1 x 10/side", rest: "-", load: "Light band at the ankle; no low-back twist", min: 1 },
+    { name: "Supine 90/90 active hip internal rotation", dose: "1 x 10", rest: "-", load: "Bodyweight; knees together, feet fan out", min: 1 },
+    { name: "Supine isometric hip flexion (knee into hands)", dose: "1 round: 3 x 10 s/side", rest: "-", load: "Bodyweight; no movement", min: 1 },
+  ],
+};
+const HIP_PRIMER: Omit<Session, "start"> = {
+  name: "Pre-round hip primer (4 min)", key: "hips",
+  goal: `Wakes up hip rotation before the round. ${HIP_SAFETY}`,
+  items: [
+    { name: "Active half-kneeling hip internal rotation", dose: "1 x 8/side, 2 s hold", rest: "-", load: "Bodyweight", min: 1.5 },
+    { name: "Supine 90/90 active hip internal rotation", dose: "1 x 10", rest: "-", load: "Bodyweight (use a mat or towel)", min: 1 },
+    { name: "Supine isometric hip flexion (knee into hands)", dose: "3 x 10 s/side", rest: "-", load: "Bodyweight", min: 1.5 },
+  ],
+};
+const HAM_SAT: Omit<Session, "start"> = {
+  name: "Optional hamstring add-on (10 min)",
+  goal: "Optional, after TheStack. Slow 3 s lowering on every rep. Add a little load or reps every 1-2 weeks; stop if you cramp or feel sharp pain.",
+  items: [
+    { name: "KB single-leg RDL, 3 s lowering", dose: "2 x 6/side", rest: "45 s", load: "Light to moderate KB (12-20 kg), hips square", min: 5 },
+    { name: "Banded hamstring curl", dose: "2 x 12", rest: "45 s", load: "Lying face down, band anchored low around the ankle; 3 s return", min: 5 },
+  ],
+};
+const WEDGE30: Omit<Session, "start"> = {
+  name: "Rapsodo wedge distance (30 min)", key: "wedges",
+  goal: "Score: random-distance balls that finish within 5 yd of the target, out of 10.",
+  items: [
+    { name: "Warm-up wedges", dose: "10 easy balls", rest: "-", load: "Wedges", min: 5 },
+    { name: "Ladder 30-100 yd in 10-yd steps", dose: "3 balls each distance (24 balls)", rest: "Full routine each ball", load: "Wedges; goal within ±5 yd", min: 15 },
+    { name: "Random-distance test", dose: "10 balls, new distance each ball (30-100 yd)", rest: "-", load: "Score = number within 5 yd", min: 10 },
+  ],
+};
+const PUTT20: Omit<Session, "start"> = {
+  name: "Putting (20 min)", key: "putting",
+  goal: "Score: attempts needed to make 10 in a row from 3 ft (10 is perfect).",
+  items: [
+    { name: "Gate drill", dose: "3-4 ft through a tee gate", rest: "-", load: "Putter, 2 tees", min: 5 },
+    { name: "Lag ladder 10, 20, 30 ft", dose: "Rounds of 3 balls per distance", rest: "-", load: "Finish within 18 in", min: 10 },
+    { name: "Make 10 in a row from 3 ft", dose: "Restart the count on a miss", rest: "-", load: "Log attempts", min: 5 },
+  ],
+};
+const SIM18: Omit<Session, "start"> = {
+  name: "GSPro sim 18 (light, front tees, no driver)", key: "sim",
+  goal: "Low-stress approach and putting practice. Track greens hit and average proximity, not score. Now and then move back a tee or add driver for a challenge. Saturday works as a swap day.",
+  items: [
+    { name: "18 holes, front tees, no driver", dose: "18 holes, one ball", rest: "-", load: "Irons, wedges, putter; full routine on approaches", min: 75 },
+    { name: "Log GIR + average proximity", dose: "2 entries", rest: "-", load: "Today tab", min: 5 },
+  ],
+};
+const ROUND18: Omit<Session, "start"> = {
+  name: "Monday 18 holes (tee about 1:15 PM)", key: "eighteen",
+  goal: "One focus all round. Snack at the turn and keep drinking water. Done about 5:15; light dinner after and nothing else this evening. Score: your 18-hole score.",
+  items: [
+    { name: "Putts + easy swings", dose: "10 putts, 10 swings", rest: "-", load: "Putter, wedge to driver", min: 11 },
+    { name: "18 holes", dose: "18 holes", rest: "-", load: "One focus; track GIR and putts if you like", min: 240 },
+    { name: "Save round score", dose: "1 entry", rest: "-", load: "Today tab", min: 2 },
+  ],
+};
+const ROUND9: Omit<Session, "start"> = {
+  name: "Friday 9 holes (tee about 3:15 PM)", key: "nine",
+  goal: "9 holes until spring: sunset is about 5 PM after the Nov 1 clock change. Switch back to 18 when daylight allows (around mid-March). One focus. Score: your 9-hole score.",
+  items: [
+    { name: "Putts + easy swings", dose: "10 putts, 10 swings", rest: "-", load: "Putter, wedge to driver", min: 6 },
+    { name: "9 holes", dose: "9 holes", rest: "-", load: "One focus; track GIR and putts if you like", min: 120 },
+    { name: "Save round score", dose: "1 entry", rest: "-", load: "Today tab", min: 2 },
+  ],
+};
+const WALK: Omit<Session, "start"> = { name: "Recovery walk", key: "recovery", goal: "Easy pace, no hard training today.", items: [{ name: "Easy walk", dose: "1 x 30 min", rest: "-", load: "Conversational pace", min: 30 }] };
+const REVIEW: Omit<Session, "start"> = {
+  name: "Weekly review + meal prep", key: "review",
+  goal: "Answer the three review questions on the Today tab, then cook ahead for Monday and Tuesday.",
+  items: [
+    { name: "Weekly review (Today tab)", dose: "3 questions", rest: "-", load: "-", min: 10 },
+    { name: "Book next week's tee times", dose: "Mon 18 at about 1:15 PM; Fri 9 at about 3:15 PM (18 again from about mid-March)", rest: "-", load: "-", min: 5 },
+    { name: "Meal prep", dose: "Protein + carbs for 2-3 days", rest: "-", load: "-", min: 45 },
+  ],
+};
+const TESTS_AM: Omit<Session, "start"> = {
+  name: "Testing Day tests", key: "speed",
+  goal: "Same order, same ball and same setup every Testing Day so the numbers compare. Measure throws and jumps with a tape. Enter everything on the Tests tab.",
+  items: [
+    { name: "TheStack R-Speed test", dose: "8 swings", rest: "30-60 s", load: "GT2, barefoot, air swings (same as baseline)", min: 8 },
+    { name: "Rapsodo drives with a ball", dose: "5 max drives", rest: "30-60 s", load: "Driver, shoes on; best club + ball speed", min: 7 },
+    { name: "Broad jump", dose: "3 attempts", rest: "60 s", load: "Bodyweight; best distance in inches", min: 5 },
+    { name: "Rotational slam ball throw for distance", dose: "3/side", rest: "60 s", load: "Same slam ball every test; best each side in feet", min: 7 },
+    { name: "Seated chest pass for distance", dose: "3 attempts", rest: "60 s", load: "Same slam ball; best in feet", min: 5 },
+    { name: "Toe touch + active straight-leg raise", dose: "1 check each, ASLR both sides", rest: "-", load: "Phone angle app for ASLR degrees", min: 3 },
+    { name: "Enter results", dose: "1 entry", rest: "-", load: "Tests tab", min: 3 },
+  ],
+};
+const MOBTEST: Omit<Session, "start"> = {
+  name: "Mobility score test (Pliability or GOWOD)", key: "mobility",
+  goal: "GOWOD advises testing at least 2 hours after waking with no mobility work beforehand, so today's routine is only the 5-min warm-up.",
+  items: [{ name: "Phone-app mobility test", dose: "1 test", rest: "-", load: "Pliability (about 3 min) or GOWOD (about 12-15 min)", min: 15 }],
+};
+const T = (h: number, m: number): number => h + m / 60;
+
+const PLAN: Record<DayKey, DayPlan> = {
+  Mon: {
+    key: "Mon", focus: "TheStack + 18 holes",
+    am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block, 6:34-7:04 TheStack",
+    pm: "Free from 1 PM: 12:55 warm-up, 1:00 hip primer, tee about 1:15, 18 holes done about 5:15, light dinner, quiet evening",
+    checks: ["wake", "mobility", "hipmini", "speed", "hips", "eighteen", "protein", "water", "screens", "bed"],
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34)", hips: "Pre-round hip primer, 4 min (1:00)", eighteen: "18 holes, tee about 1:15 PM (warm-up 12:55)" },
+    parts: [
+      { kind: "stretch", routine: "daily", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 30)) },
+      { kind: "session", s: at(SPEED, T(6, 34)) },
+      { kind: "stretch", routine: "warmup", start: T(12, 55) },
+      { kind: "session", s: at(HIP_PRIMER, T(13, 0)) },
+      { kind: "session", s: at(ROUND18, T(13, 4)) },
+    ],
+  },
+  Tue: {
+    key: "Tue", focus: "Strength A + putting + sim 18",
+    am: "6:10-6:28 mobility (no throws), 6:28-6:32 hip mini-block, 6:32-7:26 Strength A (with hamstrings)",
+    pm: "4:30-4:50 putting, 6:45-8:05 GSPro sim 18",
+    checks: ["wake", "mobility", "hipmini", "strength", "putting", "sim", "protein", "water", "screens", "bed"],
+    labels: { mobility: "Mobility + strength, 18 min (6:10, no throws)", hipmini: "Daily hip mini-block, 4 min (6:28)", strength: "Strength A + power primer (6:32)", putting: "Putting 20 min (4:30)", sim: "GSPro sim 18, front tees, no driver (6:45)" },
+    parts: [
+      { kind: "stretch", routine: "dailylift", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 28)) },
+      { kind: "session", s: at(STRENGTH_A, T(6, 32)) },
+      { kind: "session", s: at(PUTT20, T(16, 30)) },
+      { kind: "session", s: at(SIM18, T(18, 45)) },
+    ],
+  },
+  Wed: {
+    key: "Wed", focus: "TheStack + wedges + putting",
+    am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block, 6:34-7:04 TheStack, 7:04-7:14 hip block",
+    pm: "4:30-5:00 wedges, 5:00-5:20 putting",
+    checks: ["wake", "mobility", "hipmini", "speed", "hips", "wedges", "putting", "protein", "water", "screens", "bed"],
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34; lower effort if legs are sore)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge distance 30 min (4:30)", putting: "Putting 20 min (5:00)" },
+    parts: [
+      { kind: "stretch", routine: "daily", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 30)) },
+      { kind: "session", s: at(SPEED, T(6, 34)) },
+      { kind: "session", s: at(HIP_BLOCK, T(7, 4)) },
+      { kind: "session", s: at(WEDGE30, T(16, 30)) },
+      { kind: "session", s: at(PUTT20, T(17, 0)) },
+    ],
+  },
+  Thu: {
+    key: "Thu", focus: "Strength B (moderate legs) + wedges + sim 18",
+    am: "6:10-6:28 mobility (no throws), 6:28-6:32 hip mini-block, 6:32-7:19 Strength B",
+    pm: "4:30-5:00 wedges, 6:45-8:05 GSPro sim 18",
+    checks: ["wake", "mobility", "hipmini", "strength", "wedges", "sim", "protein", "water", "screens", "bed"],
+    labels: { mobility: "Mobility + strength, 18 min (6:10, no throws)", hipmini: "Daily hip mini-block, 4 min (6:28)", strength: "Strength B, moderate legs (6:32)", wedges: "Wedge distance 30 min (4:30)", sim: "GSPro sim 18, front tees, no driver (6:45)" },
+    parts: [
+      { kind: "stretch", routine: "dailylift", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 28)) },
+      { kind: "session", s: at(STRENGTH_B, T(6, 32)) },
+      { kind: "session", s: at(WEDGE30, T(16, 30)) },
+      { kind: "session", s: at(SIM18, T(18, 45)) },
+    ],
+  },
+  Fri: {
+    key: "Fri", focus: "Light morning + 9 holes",
+    am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block (no TheStack, no extra lifting)",
+    pm: "Free from 3 PM: 3:00 warm-up, 3:05 hip primer, tee about 3:15, 9 holes done about 5:15 (back to 18 around mid-March)",
+    checks: ["wake", "mobility", "hipmini", "hips", "nine", "protein", "water", "screens", "bed"],
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", hips: "Pre-round hip primer, 4 min (3:05)", nine: "9 holes, tee about 3:15 PM (warm-up 3:00)" },
+    parts: [
+      { kind: "stretch", routine: "daily", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 30)) },
+      { kind: "stretch", routine: "warmup", start: T(15, 0) },
+      { kind: "session", s: at(HIP_PRIMER, T(15, 5)) },
+      { kind: "session", s: at(ROUND9, T(15, 9)) },
+    ],
+  },
+  Sat: {
+    key: "Sat", focus: "TheStack + wedges + putting",
+    am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block, 6:34-7:04 TheStack, 7:04-7:14 hip block, 7:14-7:24 optional hamstrings, 7:30-8:20 wedges + putting",
+    pm: "Free (swap option: one GSPro sim 18 here instead of Tue or Thu)",
+    checks: ["wake", "mobility", "hipmini", "speed", "hips", "wedges", "putting", "protein", "water", "screens", "bed"],
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge distance 30 min (7:30)", putting: "Putting 20 min (8:00)" },
+    parts: [
+      { kind: "stretch", routine: "daily", start: T(6, 10) },
+      { kind: "session", s: at(HIP_MINI, T(6, 30)) },
+      { kind: "session", s: at(SPEED, T(6, 34)) },
+      { kind: "session", s: at(HIP_BLOCK, T(7, 4)) },
+      { kind: "session", s: at(HAM_SAT, T(7, 14)) },
+      { kind: "session", s: at(WEDGE30, T(7, 30)) },
+      { kind: "session", s: at(PUTT20, T(8, 0)) },
+    ],
+  },
+  Sun: {
+    key: "Sun", focus: "Rest + review",
+    am: "7:00 walk, 7:30-7:56 long stretch, 7:56-8:00 hip mini-block",
+    pm: "4:30-5:30 weekly review + meal prep",
+    checks: ["wake", "mobility", "hipmini", "recovery", "review", "protein", "water", "screens", "bed"],
+    labels: { wake: "Up by 6:30 (weekend grace)", mobility: "Sunday long stretch (7:30)", hipmini: "Daily hip mini-block, 4 min (7:56)" },
+    parts: [
+      { kind: "session", s: at(WALK, T(7, 0)) },
+      { kind: "stretch", routine: "sunday", start: T(7, 30) },
+      { kind: "session", s: at(HIP_MINI, T(7, 56)) },
+      { kind: "session", s: at(REVIEW, T(16, 30)) },
+    ],
+  },
+};
+const TEST_PLAN: DayPlan = {
+  key: "Wed", focus: "Testing Day + wedges + putting",
+  am: "6:25 warm-up, 6:30-7:08 tests, 9:00 mobility score, 9:15 hip mini-block",
+  pm: "4:30-5:00 wedges, 5:00-5:20 putting",
+  checks: ["wake", "mobility", "hipmini", "speed", "wedges", "putting", "protein", "water", "screens", "bed"],
+  labels: { hipmini: "Daily hip mini-block, 4 min (9:15, after the mobility test)", speed: "Testing Day tests (6:30)", mobility: "Mobility score test (9:00, Pliability or GOWOD)", wedges: "Wedge distance 30 min (4:30)", putting: "Putting 20 min (5:00)" },
+  testing: true,
+  parts: [
+    { kind: "stretch", routine: "warmup", start: T(6, 25) },
+    { kind: "session", s: at(TESTS_AM, T(6, 30)) },
+    { kind: "session", s: at(MOBTEST, T(9, 0)) },
+    { kind: "session", s: at(HIP_MINI, T(9, 15)) },
+    { kind: "session", s: at(WEDGE30, T(16, 30)) },
+    { kind: "session", s: at(PUTT20, T(17, 0)) },
+  ],
+};
+function planFor(dateIso: string, key: DayKey): DayPlan { return TESTING_DATES.indexOf(dateIso) >= 0 ? TEST_PLAN : PLAN[key]; }
+const DAY_ORDER: DayKey[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const JS_DAYS: DayKey[] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const BASE_LABELS: Record<string, string> = {
+  nine: "9 holes", hips: "Hip block", hipmini: "Daily hip mini-block, 4 min", wake: "Up by 6:00",
+  mobility: "Mobility + strength routine, 20 min (6:10)", strength: "Strength session", speed: "TheStack speed (6:34)",
+  wedges: "Wedge distance 30 min", putting: "Putting 20 min", sim: "GSPro sim 18 (light)", eighteen: "18 holes",
+  recovery: "Recovery walk 30 min", review: "Weekly review + meal prep", protein: "Protein at every meal",
+  water: "Water: 3 bottles", screens: "Screens off by 9:45 (after check-in)", bed: "In bed by 10:00",
+};
+
+function partStart(p: Part): number { return p.kind === "stretch" ? p.start : p.s.start; }
+function partEnd(p: Part): number { return p.kind === "stretch" ? p.start + routineSecs(p.routine) / 3600 : p.s.start + sessMin(p.s) / 60; }
+function partBlock(p: Part): Block {
+  if (p.kind === "stretch") return { s: p.start, e: partEnd(p), t: ROUTINES[p.routine].label, k: p.routine === "warmup" ? undefined : "mobility", routine: p.routine };
+  return { s: p.s.start, e: partEnd(p), t: p.s.name, k: p.s.key };
+}
+function nightBlocks(): Block[] {
+  return [
+    { s: 21, e: 21.5, t: "Wind-down: lights low, gear out for tomorrow" },
+    { s: 21.5, e: 21.75, t: "Evening check-in in this app (chat reminder about 9:30 PM)" },
+    { s: 21.75, e: 22, t: "Screens off; read or breathe", k: "screens" },
+    { s: 22, e: 22.5, t: "Lights out", k: "bed" },
+  ];
+}
+function fillGaps(bs: Block[], from: number, to: number, label: string): Block[] {
+  const inside = bs.filter((b) => b.e > from && b.s < to).sort((a, b) => a.s - b.s);
+  const out: Block[] = [];
+  let t = from;
+  inside.forEach((b) => { if (b.s - t > 0.08) out.push({ s: t, e: b.s, t: label }); t = Math.max(t, b.e); });
+  if (to - t > 0.08) out.push({ s: t, e: to, t: label });
+  return out;
+}
+function buildBlocks(p: DayPlan): Block[] {
+  const parts = p.parts.map(partBlock);
+  const am = p.parts.filter((x) => partStart(x) < 7.4);
+  const pm = p.parts.filter((x) => partStart(x) >= 12);
+  const amEnd = am.reduce((m, x) => Math.max(m, partEnd(x)), 6.5);
+  const pmEnd = pm.reduce((m, x) => Math.max(m, partEnd(x)), 16.5);
+  let fixed: Block[] = [];
+  if (p.key === "Sat") {
+    fixed = [
+      { s: 6, e: T(6, 10), t: "Wake: water, daylight (morning plan reminder about 6:00 AM)", k: "wake" },
+      { s: T(7, 24), e: 7.5, t: "Protein breakfast (quick: shake or yogurt; eat more after putting)", k: "protein" },
+    ];
+    const all = [...fixed, ...parts];
+    fixed = [...fixed, ...fillGaps(all, 8 + 20 / 60, 21, "Free day (swap option: GSPro sim 18 this evening); refill water")];
+  } else if (p.key === "Sun") {
+    fixed = [
+      { s: 6.5, e: T(6, 40), t: "Wake by 6:30: water, daylight (reminder about 6:00 AM)", k: "wake" },
+      { s: T(6, 40), e: 7, t: "Protein breakfast", k: "protein" },
+      { s: 8, e: 16.5, t: "Free day; refill water through the day", k: "water" },
+      { s: 17.5, e: 21, t: "Free time" },
+    ];
+  } else {
+    fixed = [
+      { s: 6, e: T(6, 10), t: "Wake: water, daylight, open Today (reminder about 6:00 AM)", k: "wake" },
+      { s: amEnd, e: 8, t: "Shower + protein breakfast", k: "protein" },
+    ];
+    if (p.testing) {
+      fixed.push({ s: 8, e: 9, t: "Open time: errands, prep lunch" });
+      fixed.push({ s: T(9, 19), e: 9.75, t: "Open time" });
+    } else {
+      fixed.push({ s: 8, e: 9.75, t: "Open time: errands, a walk, prep lunch" });
+    }
+    fixed.push({ s: 9.75, e: 10, t: "Refill water bottle, settle in" });
+    const pmBlocks = pm.map(partBlock);
+    let freeFrom = 16.5;
+    let freeLabel = "Free time";
+    let dinner: Block = { s: 18, e: 18.75, t: "Dinner" };
+    if (p.key === "Mon") {
+      fixed.push({ s: 10, e: T(12, 55), t: "Work until about 1:00 (early lunch with protein, fill 2 water bottles for the round)", k: "water" });
+      dinner = { s: 17.5, e: T(18, 15), t: "Light dinner" };
+      freeFrom = T(12, 55);
+      freeLabel = "Quiet evening: nothing else planned";
+    } else if (p.key === "Fri") {
+      fixed.push({ s: 10, e: 15, t: "Work until 3:00 (protein lunch, refill water at lunch)", k: "water" });
+      freeFrom = 15;
+    } else {
+      fixed.push({ s: 10, e: 16, t: "Work: protein lunch, refill water at lunch and 2:00", k: "water" });
+      fixed.push({ s: 16, e: 16.5, t: "Snack + change for the evening" });
+      const coversDinner = pmBlocks.some((b) => b.s < 18.75 && b.e > 18);
+      if (coversDinner) dinner = { s: pmEnd, e: Math.min(pmEnd + 0.4, 21), t: "Light dinner" };
+    }
+    fixed.push(dinner);
+    fixed = [...fixed, ...fillGaps([...pmBlocks, dinner], freeFrom, 21, freeLabel)];
+  }
+  return [...fixed, ...parts, ...nightBlocks()].sort((a, b) => a.s - b.s);
+}
+
+const LOG_KINDS: { value: LogKind; label: string; unit: string }[] = [
+  { value: "speed", label: "Driver club speed (mph)", unit: "mph" },
+  { value: "ball", label: "Driver ball speed, Rapsodo (mph)", unit: "mph" },
+  { value: "bench", label: "Bench working weight (lb)", unit: "lb" },
+  { value: "trap", label: "Trap bar working weight (lb)", unit: "lb" },
+  { value: "score18", label: "18-hole score", unit: "" },
+  { value: "score9", label: "9-hole score", unit: "" },
+  { value: "hcp", label: "Handicap index", unit: "" },
+];
+
+const REELS = "From reels you shared";
+const HIPV1 = "From the hip videos you shared";
+const HIPV2 = HIPV1;
+const PWR = "Max effort, full rest";
+const ALL7: DayKey[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DRILLS: Drill[] = [
+  { id: "trapjump", group: "Power", name: "Light trap bar jump", days: ["Tue"], when: "Strength A primer, 6:32", time: "5 min", reps: "3 x 3-5, 90 s rest", cue: "Empty bar or bar + 10s; jump tall, land soft with hips back, reset each rep.", pass: `All sets fast and soft. ${PWR}.` },
+  { id: "bound", group: "Power", name: "Lateral bound / skater", days: ["Tue"], when: "Strength A primer, 6:37", time: "4 min", reps: "3 x 4/side, 60 s rest", cue: "Push off the outside foot, land on the other, stick it for 2 s.", pass: `Every landing stuck with the knee over the foot. ${PWR}.` },
+  { id: "slrdl", group: "Power", name: "Single-leg RDL to knee drive + small hop", days: ["Tue"], when: "Strength A primer, 6:41", time: "5 min", reps: "3 x 5/side, 45 s rest", cue: "Hinge on one leg, drive the back knee up, add a small hop. Bodyweight or a light KB first.", pass: "All reps balanced with quiet landings.", credit: REELS },
+  { id: "shotput", group: "Power", name: "Step-behind rotational shot-put throw", days: ["Tue"], when: "Strength A primer, 6:46", time: "5 min", reps: "3 x 4/side, 60 s rest", cue: "Step the back foot behind, load the back hip, throw the slam ball into a wall from the chest.", pass: `All throws at full speed. ${PWR}.` },
+  { id: "hamrdl", group: "Power", name: "Hamstrings: barbell Romanian deadlift, 3 s lowering", days: ["Tue"], when: "Strength A, in the bench rests (about 7:03)", time: "4 min", reps: "3 x 8, RPE 5, bar + 10 lb (5 lb per side)", cue: "Bar close to the legs, soft knees, push hips back, lower over 3 s only to a hamstring stretch with a flat back. Add 5-10 lb every 1-2 weeks only if form is perfect and nothing hurts. Alternative: single 25-35 lb KB RDL.", pass: "All sets with a flat back and 3 s lowering. Stop if you cramp or feel sharp pain." },
+  { id: "hamnordic", group: "Power", name: "Hamstrings: band-assisted eccentric Nordic curl (or slider/banded curl)", days: ["Tue"], when: "Strength A, after the RDLs (about 7:17)", time: "5 min", reps: "3 x 4-6, 60 s rest", cue: "Kneel on a pad, feet anchored, band from above for help; lower over 3-5 s, catch with your hands, push back up. Use slider or banded curls if Nordics are too much.", pass: "All reps lowered under control. Stop if you cramp or feel sharp pain." },
+  { id: "latlunge", group: "Power", name: "Goblet lateral lunge", days: ["Tue"], when: "Strength A, last exercise (about 7:22)", time: "4 min", reps: "2 x 5-6/side, 45 s rest", cue: "Sit into one hip, other leg straight, chest tall; push back to the middle.", pass: "All reps to a comfortable depth with heels down." },
+  { id: "stepin", group: "Power", name: "Step-in overhead throw (Greg Rose lead-leg drill)", days: ["Thu"], when: "Strength B primer, 6:32", time: "4 min", reps: "3 x 5, 60 s rest", cue: "Progress kneeling, then standing, then a step-in with the lead leg; throw the slam ball overhead into a wall.", pass: `15 fast throws at your current stage. ${PWR}.` },
+  { id: "scoop", group: "Power", name: "Golf-swing scoop toss into wall", days: ["Thu"], when: "Strength B primer, 6:36", time: "5 min", reps: "3 x 4/side, 60 s rest", cue: "Golf posture, load the trail hip, rotate hard and release the ball into the wall.", pass: `All tosses at full speed, both sides. ${PWR}.` },
+  { id: "kneeljump", group: "Power", name: "Kneeling jump to squat (or a swap below)", days: ["Thu"], when: "Strength B primer, 6:41 (2 sets: round tomorrow)", time: "2 min", reps: "2 x 4, 60 s rest", cue: "Pad under knees. Kneel tall, swing arms, pop feet under you into a squat. Swap if knees/landing feel off: pause squat jump, countermovement jump, light trap bar jump, KB swing, or half-kneeling scoop toss (each is tickable under Drills > Power); tick this drill too when the swap is done.", pass: "8 reps landing balanced in a squat, or one swap done.", credit: REELS },
+  { id: "swap_pause", group: "Power", name: "Swap option: pause squat jump", days: [], when: "Swap option, Thu 6:41: instead of the kneeling jump (same 2 min); 3 x 4 when used as a full primer", time: "2 min", reps: "2 x 4 Thu (3 x 4 full), 60 s rest", cue: "Squat down, pause 2 s at the bottom, then jump straight up and land soft.", pass: "Swap if knees/landing feel off. All reps landed quietly." },
+  { id: "swap_cmj", group: "Power", name: "Swap option: countermovement jump", days: [], when: "Swap option, Thu 6:41: instead of the kneeling jump (same 2 min); 3 x 5 when used as a full primer", time: "2 min", reps: "2 x 5 Thu (3 x 5 full), 60 s rest", cue: "Quick dip, arms swing, jump tall; stick the landing for 2 s.", pass: "Swap if knees/landing feel off. Every landing stuck." },
+  { id: "swap_trap", group: "Power", name: "Swap option: light trap bar jump", days: [], when: "Swap option, Thu 6:41: instead of the kneeling jump (same 2 min); 3 x 4 when used as a full primer", time: "2 min", reps: "2 x 4 Thu (3 x 4 full), bar + about 20 lb (20-30% of trap bar working weight)", cue: "Hips back, jump tall, land soft and reset every rep.", pass: "Swap if knees/landing feel off. All reps fast and soft." },
+  { id: "swap_swing", group: "Power", name: "Swap option: kettlebell swing (no landing)", days: [], when: "Swap option, Thu 6:41: instead of the kneeling jump (same 2 min); 3 x 8 when used as a full primer", time: "2 min", reps: "2 x 8 Thu (3 x 8 full), 12-16 kg KB", cue: "Hinge, then snap the hips forward; the bell floats to chest height, flat back.", pass: "Swap if knees/landing feel off. All reps crisp with a flat back." },
+  { id: "swap_scoop", group: "Power", name: "Swap option: half-kneeling slam ball scoop toss", days: [], when: "Swap option, Thu 6:41: instead of the kneeling jump (same 2 min), for rotation with no landing", time: "2 min", reps: "2 x 4/side, 60 s rest, 6-8 lb slam ball", cue: "Half-kneeling, side to the wall; rotate from the hips and throw the ball into the wall.", pass: "Swap if knees/landing feel off. All tosses fast, both sides." },
+  { id: "boxjump", group: "Power", name: "Low box/bench jump holding a slam ball", days: ["Thu"], when: "Strength B primer, 6:43 (never on TheStack days)", time: "2 min", reps: "2 x 3, 60 s rest", cue: "Slam ball at chest, jump onto a low box or bench, land soft, then step down.", pass: "6 soft, quiet landings.", credit: REELS },
+  { id: "chestpass", group: "Power", name: "Seated/supine slam ball chest pass", days: ["Thu"], when: "Strength B, in the rest after each bench set", time: "2 min", reps: "3 x 5", cue: "Seated against a wall or lying down; push the ball up or out as fast as you can.", pass: `15 fast passes. ${PWR}.` },
+  { id: "splitsq", group: "Power", name: "Barbell split squat (light)", days: ["Thu"], when: "Strength B, moderate legs (about 7:07)", time: "5 min", reps: "2 x 6/side, 90 s rest", cue: "Torso tall, front heel down, back knee lowers under the hip. Bodyweight or empty bar only.", pass: "Both sets at RPE 6 or easier.", credit: REELS },
+  { id: "plyopush", group: "Power", name: "Plyo push-up", days: ["Thu"], when: "Strength B finisher (about 7:12)", time: "3 min", reps: "3 x 5, 60 s rest", cue: "Hands on a bench to start; push hard enough that the hands leave, land soft.", pass: `15 explosive reps. ${PWR}.` },
+  { id: "hambridge", group: "Power", name: "Hamstrings: single-leg glute bridge or bridge walkouts", days: ["Thu"], when: "Strength B, last exercise (about 7:15)", time: "4 min", reps: "2 x 8/side, 45 s rest", cue: "Bodyweight only, no heavy hinge (round tomorrow); hips level, lower slowly.", pass: "Both sets done without cramping." },
+  { id: "hamslrdl", group: "Power", name: "Optional: KB single-leg RDL, 3 s lowering", days: ["Sat"], when: "After the hip block, 7:14", time: "5 min", reps: "2 x 6/side, 45 s rest", cue: "Hips square, slow lowering; add load every 1-2 weeks.", pass: "Both sets balanced. Stop if you cramp or feel sharp pain." },
+  { id: "hamcurl", group: "Power", name: "Optional: banded hamstring curl", days: ["Sat"], when: "After the hip block, 7:19", time: "5 min", reps: "2 x 12, 45 s rest", cue: "Face down, band anchored low around the ankle; curl, then 3 s return.", pass: "24 smooth reps. Stop if you cramp or feel sharp pain." },
+  { id: "hip1", group: "Hips", name: "Active half-kneeling hip internal rotation", days: ALL7, when: "Daily hip mini-block (1 x 8/side, after the 6:10 routine); also Mon/Fri pre-round primer. Wed/Sat hip block: skip if done in morning", time: "2 min (primer: 1 x 8/side)", reps: "2 x 8/side, 2 s hold at end", cue: "Keep the pelvis still and feel the outer glute working.", pass: "All reps with a 2 s end hold and no pinching.", credit: HIPV1 },
+  { id: "hip2", group: "Hips", name: "Quadruped band-resisted hip internal rotation", days: ALL7, when: "Daily hip mini-block (1 x 10/side). Wed/Sat hip block: skip if done in morning", time: "1 min daily (2 min in the hip block)", reps: "1 x 10/side daily (2 x 10/side in the hip block), light band at the ankle", cue: "Tuck the tailbone slightly first; no low-back twist.", pass: "All reps with a quiet low back.", credit: HIPV1 },
+  { id: "hip3", group: "Hips", name: "Supine 90/90 active hip internal rotation", days: ALL7, when: "Daily hip mini-block (1 x 10); also Mon/Fri pre-round primer. Wed/Sat hip block: skip if done in morning", time: "2 min (primer: 1 x 10)", reps: "2 x 10", cue: "Knees together, feet fan out to the sides.", pass: "All reps smooth with no pinching.", credit: HIPV1 },
+  { id: "hip5", group: "Hips", name: "Counterbalanced banded squat", days: ["Wed", "Sat"], when: "Hip block, 7:10", time: "2 min", reps: "2 x 8, mini band at knees, light KB or plate out front", cue: "Push the knees out into the band all the way down.", pass: "All reps with knees tracking over the toes.", credit: HIPV2 },
+  { id: "hip8", group: "Hips", name: "Copenhagen side plank on bench (short lever)", days: ["Wed", "Sat"], when: "Hip block, 7:12 (never Thu or Sun)", time: "2 min", reps: "2 x 15-20 s/side", cue: "Knee on the bench first; progress to the foot only when easy.", pass: "All holds with hips level, no groin pain.", credit: HIPV2 },
+  { id: "hip6", group: "Hips", name: "Supine isometric hip flexion (knee into hands)", days: ALL7, when: "Daily hip mini-block; also Mon/Fri pre-round primer (Mon 1:02, Fri 3:07)", time: "1.5 min", reps: "3 x 10 s/side", cue: "Drive the knee into your hands while your hands push back; no movement.", pass: "All holds done with no front-of-hip pinch.", credit: HIPV2 },
+  { id: "hip4", group: "Hips", name: "Banded hip rockbacks (half-kneel or lizard)", days: [], when: "Optional swap in the Wed/Sat hip block", time: "2 min", reps: "1 x 10/side, band pulling the thigh back", cue: "Lean away from the band as you rock back.", pass: "10 smooth rocks each side, no pinching.", credit: HIPV2 },
+  { id: "hip7", group: "Hips", name: "Banded anti-valgus split squat", days: [], when: "Optional swap in the Wed/Sat hip block (never Thu or Sun)", time: "2 min", reps: "2 x 6/side, bodyweight", cue: "Don't let the knee cave into the band; weight on the front foot.", pass: "All reps with the knee over the foot.", credit: HIPV2 },
+  { id: "transfer", group: "Golf", name: "Speed-to-course transfer", days: ["Mon", "Wed", "Sat"], when: "Right after TheStack, about 6:57", time: "5 min", reps: "5 max drives on Rapsodo with a ball", cue: "Shoes on, real ball, full routine, max intent.", pass: "Best club speed and ball speed logged on the Log tab." },
+  { id: "wladder", group: "Golf", name: "Wedge ladder 30-100 yd", days: ["Wed", "Thu", "Sat"], when: "Wedge night, 5 min after warm-up", time: "15 min", reps: "10-yd steps, 3 balls each (24 balls)", cue: "Full routine every ball; read the carry on Rapsodo.", pass: "All 8 distances done; note which are outside ±5 yd." },
+  { id: "wrandom", group: "Golf", name: "Random-distance wedge test", days: ["Wed", "Thu", "Sat"], when: "End of the wedge session", time: "10 min", reps: "10 balls, new distance each ball", cue: "Pick a random distance from 30-100 yd before each ball.", pass: "Score (balls within 5 yd, out of 10) saved on Today." },
+  { id: "gate", group: "Golf", name: "Gate drill 3-4 ft", days: ["Tue", "Wed", "Sat"], when: "Start of putting", time: "5 min", reps: "Continuous putts through a tee gate", cue: "Two tees just wider than the putter head; start the ball through the gate.", pass: "5 minutes of clean starts through the gate." },
+  { id: "lagladder", group: "Golf", name: "Lag ladder 10-20-30 ft", days: ["Tue", "Wed", "Sat"], when: "Middle of putting", time: "10 min", reps: "Rounds of 3 balls at each distance", cue: "Pace first; picture the ball dying at the hole.", pass: "Most putts finish within 18 in." },
+  { id: "make10", group: "Golf", name: "Make 10 in a row from 3 ft", days: ["Tue", "Wed", "Sat"], when: "End of putting", time: "5 min", reps: "Restart on any miss", cue: "Same routine on every putt.", pass: "10 in a row made; attempts saved on Today." },
+  { id: "sim18", group: "Golf", name: "GSPro sim 18: front tees, no driver", days: ["Tue", "Thu"], when: "6:45 PM (swap option: Saturday)", time: "80 min", reps: "18 holes, irons/wedges/putter", cue: "Light and low-stress: full routine on every approach. For a challenge, move back a tee or add driver.", pass: "GIR out of 18 and average proximity saved on Today." },
+  { id: "round18", group: "Golf", name: "Monday 18 holes", days: ["Mon"], when: "Warm-up 12:55, tee about 1:15 PM, done about 5:15", time: "About 4 h", reps: "18 holes, one focus", cue: "Steady pace, snack at the turn, one focus all round.", pass: "Score saved on Today." },
+  { id: "round9", group: "Golf", name: "Friday 9 holes (18 again from about mid-March)", days: ["Fri"], when: "Warm-up 3:00, tee about 3:15 PM, done about 5:15", time: "About 2 h", reps: "9 holes, one focus", cue: "Beat the 5 PM sunset: keep a steady pace, one focus.", pass: "Score saved on Today." },
+];
+const GAMES: GameDef[] = [
+  { id: "wrandom", name: "Wedge random test", scoring: "Balls within 5 yd, out of 10", higher: true, days: ["Wed", "Thu", "Sat"] },
+  { id: "make10", name: "Make 10 in a row", scoring: "Attempts needed (10 is perfect, lower is better)", higher: false, days: ["Tue", "Wed", "Sat"] },
+  { id: "simgir", name: "Sim 18 greens hit", scoring: "Greens in regulation, out of 18", higher: true, days: ["Tue", "Thu"] },
+  { id: "simprox", name: "Sim 18 proximity", scoring: "Average approach proximity in feet (lower is better)", higher: false, days: ["Tue", "Thu"] },
+];
+const SCREENS = [
+  { id: "squat", name: "Overhead deep squat", how: "Club overhead, feet shoulder width, squat as deep as you can", good: "Arms stay over feet, heels down, hips below knees", fix: "Spiderman stretch with reach, KB single-leg RDL (slow), knee-to-wall ankle rock and child's pose side reach (Sunday)" },
+  { id: "toe", name: "Toe touch", how: "Feet together, legs straight, reach down slowly", good: "Fingertips reach toes with no strain", fix: "Banded lying hamstring stretch and banded active straight-leg raise (daily), KB single-leg RDL (slow lower), Tuesday RDL + Nordic curls" },
+  { id: "aslr", name: "Active straight-leg raise", how: "Lie on your back, both legs straight; lift one leg as high as you can, other leg stays flat", good: "Raised leg gets near vertical without the other knee bending; measure the angle each side", fix: "Banded active straight-leg raise and banded lying hamstring stretch (daily), slow RDLs and curls" },
+  { id: "tilt", name: "Pelvic tilt", how: "Golf posture, hands on hips, tilt pelvis forward and back", good: "Smooth both ways, upper body stays still", fix: "Spiderman stretch, half-kneeling Pallof press, half-kneeling hip flexor stretch (Sunday)" },
+  { id: "prot", name: "Pelvic rotation", how: "Golf posture, arms crossed, turn hips while shoulders stay still", good: "Hips turn freely without the chest moving", fix: "90/90 hip switches, 90/90 hip lift-offs, seated banded hip internal rotation, daily hip mini-block, windshield wipers (Sunday)" },
+  { id: "trunk", name: "Seated trunk rotation", how: "Sit, club across chest, knees together, turn each way", good: "Even turn both sides; measure the angle", fix: "Open books, Pallof press with rotation, thread the needle (Sunday)" },
+  { id: "er", name: "90/90 shoulder external rotation", how: "Golf posture, upper arm out at 90, elbow 90, rotate back", good: "Even both sides, no pain; measure the angle", fix: "90/90 band external rotation, child's pose side reach (Sunday)" },
+  { id: "bal", name: "Single-leg balance", how: "Stand on one leg, eyes closed, time it", good: "Record seconds each leg; compare sides", fix: "KB single-leg RDL, banded lateral step-overs, single-leg glute bridge (Sunday)" },
+];
+const RESULT_OPTS = ["Not tested", "Pass", "Limited", "Pain (see a physio)"];
+
+function pad(n: number): string { return n < 10 ? `0${n}` : `${n}`; }
+function iso(d: Date): string { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function addDays(d: Date, n: number): Date { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+function shortDate(s: string): string { const p = s.split("-"); if (p.length < 3) return s; return `${Number(p[1])}/${Number(p[2])}`; }
+function clockParts(h: number) { const total = Math.round(h * 60); const hh = Math.floor(total / 60) % 24; const mm = total % 60; const h12 = hh % 12 === 0 ? 12 : hh % 12; return { c: `${h12}:${pad(mm)}`, mer: hh < 12 ? "AM" : "PM" }; }
+function fmtHour(h: number): string { const p = clockParts(h); return `${p.c} ${p.mer}`; }
+function fmtRange(a: number, b: number): string { const x = clockParts(a); const y = clockParts(b); return x.mer === y.mer ? `${x.c}-${y.c} ${y.mer}` : `${x.c} ${x.mer}-${y.c} ${y.mer}`; }
+function mmss(s: number): string { const v = Math.max(0, Math.round(s)); return `${Math.floor(v / 60)}:${pad(v % 60)}`; }
+function emptyStore(): Store { return { days: {}, logs: [SEED_LOG], assess: [], games: [], tests: [], seeded: true }; }
+function normalize(parsed: Partial<Store>): Store {
+  const logs = parsed.logs || [];
+  return { days: parsed.days || {}, logs: parsed.seeded ? logs : [SEED_LOG, ...logs], assess: parsed.assess || [], games: parsed.games || [], tests: parsed.tests || [], startDate: parsed.startDate, seeded: true };
+}
+function loadStore(): { store: Store; ok: boolean } {
+  try {
+    const raw = window.localStorage.getItem(STORE_KEY);
+    if (!raw) return { store: emptyStore(), ok: true };
+    return { store: normalize(JSON.parse(raw)), ok: true };
+  } catch (_e) { return { store: emptyStore(), ok: false }; }
+}
+function dayScore(store: Store, d: Date): number {
+  const rec = store.days[iso(d)];
+  if (!rec) return 0;
+  const plan = planFor(iso(d), JS_DAYS[d.getDay()]);
+  return plan.checks.filter((k) => rec.c[k]).length / plan.checks.length;
+}
+function streakOf(test: (d: Date) => boolean, today: Date): number {
+  let d = test(today) ? today : addDays(today, -1);
+  let n = 0;
+  while (n < 500 && test(d)) { n += 1; d = addDays(d, -1); }
+  return n;
+}
+function thinLabels(labels: string[]): string[] {
+  if (labels.length <= 8) return labels;
+  const step = (labels.length - 1) / 5; const keep = new Set<number>();
+  for (let i = 0; i <= 5; i++) keep.add(Math.round(i * step));
+  return labels.map((l, i) => (keep.has(i) ? l : ""));
+}
+function stretchRows(r: RoutineKey, start: number): string[][] {
+  let t = start;
+  return ROUTINES[r].moves.map((m) => { const s = t; t += m.secs / 3600; return [fmtRange(s, t), m.name, doseOf(m), m.cue]; });
+}
+function sessionRows(s: Session): string[][] {
+  let t = s.start;
+  return s.items.map((e) => { const a = t; t += e.min / 60; return [fmtRange(a, t), e.name, `${e.dose}, rest ${e.rest}`, e.load]; });
+}
+
+function TapItem(props: { label: string; done: boolean; onTap: () => void; openLabel?: string; onOpen?: () => void }) {
+  const t = useGrokTheme();
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "stretch" }}>
+      <button onClick={props.onTap} style={{ flex: "1 1 220px", minHeight: 58, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${props.done ? t.border.focus : t.border.default}`, background: props.done ? t.fill.accentSubtle : t.bg.elevated, color: t.text.primary, fontFamily: t.font.family, fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight }}>
+        <span style={{ flex: "0 0 auto", width: 28, height: 28, borderRadius: t.radius.md, border: `2px solid ${props.done ? t.fill.controlChecked : t.border.strong}`, background: props.done ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: t.weight.semibold }}>{props.done ? "✓" : ""}</span>
+        <span style={{ textDecoration: props.done ? "line-through" : "none", color: props.done ? t.text.secondary : t.text.primary }}>{props.label}</span>
+      </button>
+      {props.onOpen && (
+        <button onClick={props.onOpen} style={{ flex: "0 0 auto", minHeight: 58, padding: "0 16px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${t.border.default}`, background: t.fill.secondary, color: t.text.primary, fontFamily: t.font.family, fontSize: t.font.body2.fontSize, fontWeight: t.weight.medium }}>{props.openLabel || "Open"}</button>
+      )}
+    </div>
+  );
+}
+function TapList(props: { items: { key: CheckKey; label: string; done: boolean }[]; onTap: (k: CheckKey) => void; onOpenMobility?: () => void }) {
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {props.items.map((it) => <TapItem key={it.key} label={it.label} done={it.done} onTap={() => props.onTap(it.key)} openLabel="Start timer" onOpen={it.key === "mobility" ? props.onOpenMobility : undefined} />)}
+    </div>
+  );
+}
+function ProgressBar(props: { value: number; label: string }) {
+  const t = useGrokTheme();
+  const pct = Math.max(0, Math.min(1, props.value));
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{props.label}</div>
+      <div style={{ height: 12, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}><div style={{ width: `${pct * 100}%`, height: "100%", background: t.dataviz.categorical[0], borderRadius: t.radius.full }} /></div>
+    </div>
+  );
+}
+function Rating(props: { label: string; value?: number; onPick: (n: number) => void }) {
+  const t = useGrokTheme();
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{props.label}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {[1, 2, 3, 4, 5].map((n) => { const on = props.value === n; return (
+          <button key={n} onClick={() => props.onPick(n)} style={{ width: 54, height: 50, borderRadius: t.radius.lg, cursor: "pointer", border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.controlChecked : t.bg.elevated, color: on ? t.text.onPrimary : t.text.primary, fontSize: t.font.body1.fontSize, fontWeight: t.weight.semibold }}>{n}</button>
+        ); })}
+      </div>
+    </div>
+  );
+}
+function DrillList(props: { drills: Drill[]; done: Record<string, boolean>; onTap: (id: string) => void; showDays: boolean }) {
+  const t = useGrokTheme();
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {props.drills.map((d) => { const on = !!props.done[d.id]; return (
+        <button key={d.id} onClick={() => props.onTap(d.id)} style={{ width: "100%", display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 16px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.accentSubtle : t.bg.elevated, color: t.text.primary, fontFamily: t.font.family }}>
+          <span style={{ flex: "0 0 auto", width: 28, height: 28, marginTop: 2, borderRadius: t.radius.md, border: `2px solid ${on ? t.fill.controlChecked : t.border.strong}`, background: on ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: t.weight.semibold }}>{on ? "✓" : ""}</span>
+          <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <span style={{ fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight, fontWeight: t.weight.semibold, textDecoration: on ? "line-through" : "none", color: on ? t.text.secondary : t.text.primary }}>{d.name}</span>
+            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.primary }}>{`${d.time} · ${d.reps}`}</span>
+            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{`Cue: ${d.cue}`}</span>
+            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{`Done when: ${d.pass}`}</span>
+            <span style={{ fontSize: t.font.label.fontSize, color: t.text.tertiary }}>{`${props.showDays && d.days.length > 0 ? `${d.days.length === 7 ? "Daily" : d.days.join(", ")} · ` : ""}${d.when}${d.credit ? ` · ${d.credit}` : ""}`}</span>
+          </span>
+        </button>
+      ); })}
+    </div>
+  );
+}
+function buzz() { try { if (navigator.vibrate) navigator.vibrate([200, 80, 200]); } catch (_e) {} }
+function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; onSet: (id: string, v: boolean) => void }) {
+  const t = useGrokTheme();
+  const moves = props.moves;
+  const first = moves.findIndex((m) => !props.done[m.id]);
+  const i0 = first < 0 ? 0 : first;
+  const [idx, setIdx] = useState<number>(i0);
+  const [left, setLeft] = useState<number>(moves[i0].secs);
+  const [running, setRunning] = useState<boolean>(false);
+  useEffect(() => { if (!running) return; const id = window.setInterval(() => setLeft((x) => x - 1), 1000); return () => window.clearInterval(id); }, [running]);
+  useEffect(() => {
+    if (running && left <= 0) {
+      buzz();
+      props.onSet(moves[idx].id, true);
+      if (idx < moves.length - 1) { setIdx(idx + 1); setLeft(moves[idx + 1].secs); } else { setRunning(false); setLeft(0); }
+    }
+  }, [left, running]);
+  const go = (i: number) => { const j = Math.max(0, Math.min(moves.length - 1, i)); setIdx(j); setLeft(moves[j].secs); setRunning(false); };
+  const finish = () => { props.onSet(moves[idx].id, true); if (idx < moves.length - 1) { setIdx(idx + 1); setLeft(moves[idx + 1].secs); } else { setRunning(false); } };
+  const m = moves[idx];
+  const elapsed = m.secs - left;
+  let phase = "";
+  if (m.hold) {
+    const per = m.sides ? 2 : 1;
+    const seg = Math.min(m.rounds * per - 1, Math.floor(elapsed / m.hold));
+    const round = Math.floor(seg / per) + 1;
+    const side = m.sides ? (seg % 2 === 0 ? " · Left side" : " · Right side") : "";
+    const segLeft = m.hold - (elapsed - seg * m.hold);
+    phase = `Round ${round} of ${m.rounds}${side} · ${Math.max(0, Math.ceil(segLeft))} s in this hold`;
+  } else {
+    const sideTxt = m.sides ? (elapsed < m.secs / 2 ? " · Left side first" : " · Now the right side") : "";
+    phase = `${m.rounds} x ${m.reps || ""}${sideTxt}`;
+  }
+  const doneN = moves.filter((x) => props.done[x.id]).length;
+  const btn = (primary: boolean) => ({ minHeight: 54, padding: "0 20px", flex: "1 1 120px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${primary ? t.fill.primary : t.border.default}`, background: primary ? t.fill.primary : t.bg.elevated, color: primary ? t.text.onPrimary : t.text.primary, fontSize: t.font.body1.fontSize, fontWeight: t.weight.semibold });
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ border: `1px solid ${t.border.default}`, borderRadius: t.radius.xl, padding: 18, display: "grid", gap: 10, background: t.bg.elevated }}>
+        <div style={{ fontSize: t.font.label.fontSize, color: t.text.tertiary }}>{`Move ${idx + 1} of ${moves.length} · ${m.area}`}</div>
+        <div style={{ fontSize: t.font.heading2.fontSize, lineHeight: t.font.heading2.lineHeight, fontWeight: t.weight.semibold }}>{m.name}</div>
+        <div style={{ fontSize: t.font.body1.fontSize }}>{doseOf(m)}</div>
+        <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{m.cue}</div>
+        <div style={{ fontSize: 56, lineHeight: "64px", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: t.text.link }}>{mmss(left)}</div>
+        <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{phase}</div>
+        <div style={{ height: 8, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}><div style={{ width: `${m.secs > 0 ? (elapsed / m.secs) * 100 : 0}%`, height: "100%", background: t.dataviz.categorical[0] }} /></div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button style={btn(true)} onClick={() => setRunning(!running)}>{running ? "Pause" : left < m.secs ? "Resume" : "Start"}</button>
+          <button style={btn(false)} onClick={finish}>Done, next</button>
+          <button style={btn(false)} onClick={() => go(idx - 1)}>Back</button>
+          <button style={btn(false)} onClick={() => go(idx)}>Restart move</button>
+        </div>
+      </div>
+      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{`${doneN} of ${moves.length} moves done. Tap a move to jump to it; tap the box to tick it. Keep the screen on while the timer runs.`}</div>
+      <div style={{ display: "grid", gap: 8 }}>
+        {moves.map((x, i) => { const d = !!props.done[x.id]; return (
+          <div key={x.id} style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => props.onSet(x.id, !d)} style={{ width: 50, minHeight: 50, cursor: "pointer", borderRadius: t.radius.lg, border: `2px solid ${d ? t.fill.controlChecked : t.border.strong}`, background: d ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, fontSize: 18, fontWeight: t.weight.semibold }}>{d ? "✓" : ""}</button>
+            <button onClick={() => go(i)} style={{ flex: "1 1 200px", minHeight: 50, textAlign: "left", padding: "8px 14px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${i === idx ? t.border.focus : t.border.default}`, background: i === idx ? t.fill.accentSubtle : t.bg.elevated, color: d ? t.text.secondary : t.text.primary, fontSize: t.font.body2.fontSize }}>{`${x.name} · ${doseOf(x)}`}</button>
+          </div>
+        ); })}
+      </div>
+    </div>
+  );
+}
+
+function BackupBox(props: { store: Store; onImport: (s: Store) => void }) {
+  const t = useGrokTheme();
+  const [msg, setMsg] = useState<string>("");
+  const doExport = () => {
+    const blob = new Blob([JSON.stringify({ app: "golf-speed-plan", version: 1, exportedAt: new Date().toISOString(), data: props.store }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `golfplan-backup-${iso(nyNow())}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setMsg("Backup file saved. Keep it in Files, iCloud Drive or Google Drive.");
+  };
+  const doImport = (f: File | undefined) => {
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const parsed = JSON.parse(String(r.result));
+        const data = parsed && parsed.data ? parsed.data : parsed;
+        if (!data || typeof data !== "object" || !("days" in data || "logs" in data)) throw new Error("bad");
+        if (!window.confirm("Replace everything in the app with this backup?")) return;
+        props.onImport(normalize(data));
+        setMsg("Backup restored.");
+      } catch (_e) { setMsg("That file isn't a Golf Plan backup."); }
+    };
+    r.readAsText(f);
+  };
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <button onClick={doExport} style={{ minHeight: 52, borderRadius: t.radius.lg, border: `1px solid ${t.fill.primary}`, background: t.fill.primary, color: "#fff", fontSize: 16, fontWeight: 650, cursor: "pointer" }}>Export backup (JSON)</button>
+      <label style={{ minHeight: 52, borderRadius: t.radius.lg, border: `1px solid ${t.border.strong}`, background: t.bg.elevated, color: t.text.primary, fontSize: 16, fontWeight: 650, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        Import backup
+        <input type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { doImport(e.target.files ? e.target.files[0] : undefined); e.target.value = ""; }} />
+      </label>
+      {msg && <div style={{ fontSize: 14, color: t.text.link }}>{msg}</div>}
+    </div>
+  );
+}
+
+export default function App() {
+  const initial = useMemo(() => loadStore(), []);
+  const [store, setStore] = useState<Store>(initial.store);
+  const [saved, setSaved] = useState<boolean>(initial.ok);
+  const [now, setNow] = useState<Date>(nyNow());
+  const [tab, setTab] = useState<Tab>("today");
+  const [planDay, setPlanDay] = useState<string>(JS_DAYS[nyNow().getDay()]);
+  const [routine, setRoutine] = useState<RoutineKey>(nyNow().getDay() === 0 ? "sunday" : "daily");
+  const [drillView, setDrillView] = useState<string>("Today");
+  const [logKind, setLogKind] = useState<LogKind>("speed");
+  const [logValue, setLogValue] = useState<string>("");
+  const [logDate, setLogDate] = useState<string>(iso(nyNow()));
+  const [draftAssess, setDraftAssess] = useState<Record<string, string>>({});
+  const [assessNote, setAssessNote] = useState<Record<string, string>>({});
+  const [gameDraft, setGameDraft] = useState<Record<string, string>>({});
+  const [testDraft, setTestDraft] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(nyNow()), 30000);
+    const onVis = () => { if (document.visibilityState === "visible") setNow(nyNow()); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { window.clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+  useEffect(() => {
+    try { window.localStorage.setItem(STORE_KEY, JSON.stringify(store)); setSaved(true); } catch (_e) { setSaved(false); }
+  }, [store]);
+  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
+
+  const todayIso = iso(now);
+  const todayKey = JS_DAYS[now.getDay()];
+  const plan = planFor(todayIso, todayKey);
+  const isTestingDay = !!plan.testing;
+  const blocks = useMemo(() => buildBlocks(plan), [todayIso]);
+  const rec: DayRec = store.days[todayIso] || { c: {} };
+  const hourNow = now.getHours() + now.getMinutes() / 60;
+  const liftDay = todayKey === "Tue" || todayKey === "Thu";
+  const roundDay = todayKey === "Mon" || todayKey === "Fri";
+  const nineDay = todayKey === "Fri";
+  const effRoutine: RoutineKey = routine === "daily" && liftDay ? "dailylift" : routine;
+
+  const updateToday = (patch: Partial<DayRec>) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, ...patch } } }; });
+  const toggle = (k: CheckKey) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, [k]: !cur.c[k] } } } }; });
+  const setStretch = (r: RoutineKey, id: string, v: boolean) => setStore((s) => {
+    const cur = s.days[todayIso] || { c: {} };
+    const st = { ...(cur.stretch || {}), [`${r}:${id}`]: v };
+    const all = ROUTINES[r].moves.every((m) => st[`${r}:${m.id}`]);
+    const c = r !== "warmup" && all ? { ...cur.c, mobility: true } : cur.c;
+    return { ...s, days: { ...s.days, [todayIso]: { ...cur, stretch: st, c } } };
+  });
+  const openStretch = (r?: RoutineKey) => { setRoutine(r ? (r === "dailylift" ? "daily" : r) : todayKey === "Sun" ? "sunday" : "daily"); setTab("stretch"); };
+  const toggleDrill = (id: string) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; const dr = { ...(cur.drills || {}), [id]: !(cur.drills && cur.drills[id]) }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, drills: dr } } }; });
+  const updateRound = (patch: RoundStats) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, round: { ...(cur.round || {}), ...patch } } } }; });
+
+  const todayDrills = DRILLS.filter((d) => d.days.indexOf(todayKey) >= 0 && !(isTestingDay && d.id === "transfer"));
+  const drillDone: Record<string, boolean> = rec.drills || {};
+  const todayDrillsDone = todayDrills.filter((d) => drillDone[d.id]).length;
+  const drillStreak = streakOf((d) => {
+    const ds = DRILLS.filter((x) => x.days.indexOf(JS_DAYS[d.getDay()]) >= 0);
+    const r = store.days[iso(d)];
+    if (ds.length === 0) return !!(r && Object.values(r.c).some((v) => !!v));
+    return !!(r && r.drills && ds.some((x) => r.drills && r.drills[x.id]));
+  }, now);
+  const round: RoundStats = rec.round || {};
+
+  const gameRecs = (id: string): GameRec[] => store.games.filter((g) => g.id === id).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const bestOf = (g: GameDef): number | undefined => { const rs = gameRecs(g.id); if (rs.length === 0) return undefined; return rs.reduce((m, r) => (g.higher ? Math.max(m, r.score) : Math.min(m, r.score)), rs[0].score); };
+  const saveGame = (g: GameDef) => {
+    const v = Number(gameDraft[g.id]);
+    if (!gameDraft[g.id] || isNaN(v)) return;
+    setStore((s) => ({ ...s, games: [...s.games.filter((x) => !(x.id === g.id && x.date === todayIso)), { date: todayIso, id: g.id, score: v }] }));
+    setGameDraft({ ...gameDraft, [g.id]: "" });
+  };
+  const todayGames = GAMES.filter((g) => g.days.indexOf(todayKey) >= 0);
+  const todayScore = (id: string) => store.games.find((x) => x.id === id && x.date === todayIso);
+  const saveRound = () => {
+    const v = Number(round.score);
+    if (!round.score || isNaN(v)) return;
+    const note = [round.gir ? `GIR ${round.gir}` : "", round.putts ? `${round.putts} putts` : "", round.focus ? `focus: ${round.focus}` : ""].filter((x) => x).join(", ");
+    const kind: LogKind = nineDay ? "score9" : "score18";
+    const ck: CheckKey = nineDay ? "nine" : "eighteen";
+    setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, logs: [...s.logs.filter((l) => !(l.kind === kind && l.date === todayIso)), { date: todayIso, kind, value: v, note: note || undefined }], days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, [ck]: true } } } }; });
+  };
+  const nextTest = TESTING_DATES.find((d) => d >= todayIso);
+  const saveTests = () => {
+    const v: Record<string, string> = {};
+    TEST_FIELDS.forEach((f) => { if (testDraft[f.id]) v[f.id] = testDraft[f.id]; });
+    if (Object.keys(v).length === 0) return;
+    setStore((s) => {
+      const extra: LogEntry[] = [];
+      if (v.rspeed && !isNaN(Number(v.rspeed))) extra.push({ date: todayIso, kind: "speed", value: Number(v.rspeed), note: "Testing Day: TheStack R-Speed max" });
+      if (v.rball && !isNaN(Number(v.rball))) extra.push({ date: todayIso, kind: "ball", value: Number(v.rball), note: "Testing Day: Rapsodo" });
+      return { ...s, tests: [...s.tests.filter((x) => x.date !== todayIso), { date: todayIso, v }], logs: [...s.logs.filter((l) => !(l.date === todayIso && (l.note || "").startsWith("Testing Day"))), ...extra] };
+    });
+  };
+  const testHistory: TestRec[] = [BASELINE_TEST, ...[...store.tests].sort((a, b) => (a.date < b.date ? -1 : 1))].slice(-5);
+
+  const labelFor = (p: DayPlan, k: CheckKey): string => p.labels[k] || BASE_LABELS[k];
+  const items = plan.checks.map((k) => ({ key: k, label: labelFor(plan, k), done: !!rec.c[k] }));
+  const doneCount = items.filter((i) => i.done).length;
+  const currentBlock = blocks.find((b) => hourNow >= b.s && hourNow < b.e);
+  const nextBlock = blocks.find((b) => b.s > hourNow);
+  const firstOpen = items.find((i) => !i.done);
+  const dayStreak = streakOf((d) => dayScore(store, d) >= 0.7, now);
+  const mobStreak = streakOf((d) => !!(store.days[iso(d)] && store.days[iso(d)].c.mobility), now);
+  const bedStreak = streakOf((d) => !!(store.days[iso(d)] && store.days[iso(d)].c.bed), now);
+  const checkInDays = Object.keys(store.days).filter((k) => Object.values(store.days[k].c).some((v) => !!v)).length;
+  const mondayOffset = (now.getDay() + 6) % 7;
+  const weekStart = addDays(now, -mondayOffset);
+  const weekPoints = DAY_ORDER.map((dk, i) => { const sc = dayScore(store, addDays(weekStart, i)); return { label: dk, value: Math.round(sc * 100), display: `${Math.round(sc * 100)}%` }; });
+  const weekHasData = weekPoints.some((p) => p.value > 0);
+  const heatDays = Array.from({ length: 42 }, (_v, i) => { const d = addDays(now, i - 41); return { date: iso(d), value: Math.round(dayScore(store, d) * 100) }; });
+  const heatHasData = heatDays.some((d) => d.value > 0);
+  let programWeek = 0;
+  if (store.startDate) {
+    const p = store.startDate.split("-").map((x) => Number(x));
+    const start = new Date(p[0], p[1] - 1, p[2]);
+    const diff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - start.getTime()) / 86400000);
+    programWeek = Math.floor(diff / 7) + 1;
+  }
+  const phaseName = programWeek <= 0 ? "" : programWeek <= 4 ? "Phase 1: Foundation + baseline" : programWeek <= 8 ? "Phase 2: Build" : programWeek <= 12 ? "Phase 3: Power + speed" : "Past week 12: retest and plan the next block";
+  const logsOf = (k: LogKind) => store.logs.filter((l) => l.kind === k).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const speedLogs = logsOf("speed");
+  const bestSpeed = speedLogs.reduce((m, l) => Math.max(m, l.value), 0);
+  const benchLogs = logsOf("bench");
+  const trapLogs = logsOf("trap");
+  const scoreLogs = store.logs.filter((l) => l.kind === "score18" || l.kind === "score9" || l.kind === "hcp").sort((a, b) => (a.date < b.date ? 1 : -1));
+  const addLog = () => { const v = Number(logValue); if (!logValue || isNaN(v)) return; setStore((s) => ({ ...s, logs: [...s.logs, { date: logDate || todayIso, kind: logKind, value: v }] })); setLogValue(""); };
+  const undoLog = () => setStore((s) => ({ ...s, logs: s.logs.slice(0, -1) }));
+  const saveAssess = () => {
+    const results: Record<string, string> = {};
+    SCREENS.forEach((sc) => { const r = draftAssess[sc.id] || "Not tested"; const n = assessNote[sc.id] ? ` (${assessNote[sc.id]})` : ""; results[sc.id] = `${r}${n}`; });
+    setStore((s) => ({ ...s, assess: [...s.assess, { date: todayIso, results }] }));
+  };
+  const unitOf = (k: LogKind) => { const f = LOG_KINDS.find((x) => x.value === k); return f ? f.unit : ""; };
+  const nameOf = (k: LogKind) => { const f = LOG_KINDS.find((x) => x.value === k); return f ? f.label : k; };
+  const lineFrom = (logs: LogEntry[]) => { const labels = thinLabels(logs.map((l) => shortDate(l.date))); return logs.map((l, i) => ({ label: labels[i], value: l.value })); };
+  const lastAssess = store.assess.length > 0 ? store.assess[store.assess.length - 1] : undefined;
+  const limited = lastAssess ? SCREENS.filter((s) => { const r = lastAssess.results[s.id] || ""; return r.startsWith("Limited") || r.startsWith("Pain"); }) : [];
+  const routineEvents = blocks.filter((b) => b.s >= 6).map((b) => ({ start: b.s, end: b.e, title: b.t, selected: currentBlock === b, flag: !!(b.k && rec.c[b.k]) }));
+  const stretchDone: Record<string, boolean> = {};
+  ROUTINES[effRoutine].moves.forEach((m) => { stretchDone[m.id] = !!(rec.stretch && rec.stretch[`${effRoutine}:${m.id}`]); });
+  const stretchDoneN = ROUTINES[effRoutine].moves.filter((m) => stretchDone[m.id]).length;
+  const planList: DayPlan[] = planDay === "Test" ? [TEST_PLAN] : planDay === "All" ? DAY_ORDER.map((k) => PLAN[k]) : [PLAN[planDay as DayKey]];
+
+  return (
+    <Page title="Golf Speed Plan" summary="98 mph baseline → 110 mph goal · daily check-ins, mobility timer, drills, speed log. Every time and number is a suggestion you can adjust.">
+      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#0b1510", padding: "8px 0", margin: "0 -14px", paddingLeft: 14, paddingRight: 14, borderBottom: "1px solid #24402f" }}>
+        <Segmented<Tab>
+          options={[
+            { value: "today", label: "Today" }, { value: "drills", label: "Drills" }, { value: "stretch", label: "Mobility" }, { value: "plan", label: "Plan" },
+            { value: "phases", label: "12 weeks" }, { value: "log", label: "Log" }, { value: "assess", label: "Tests" }, { value: "food", label: "Food" },
+          ]}
+          value={tab}
+          onChange={(v) => setTab(v)}
+        />
+      </div>
+
+      {tab === "today" && (
+        <Fragment>
+          <Section heading={`Right now · ${todayKey} ${fmtHour(hourNow)}`}>
+            <Properties items={[
+              { label: "Now", value: currentBlock ? `${fmtRange(currentBlock.s, currentBlock.e)}: ${currentBlock.t}` : hourNow < 6 ? "Sleep. Up at 6:00." : "Sleep. Lights out." },
+              { label: "Next", value: nextBlock ? `${fmtHour(nextBlock.s)}: ${nextBlock.t}` : "Tomorrow, 6:00 wake" },
+              { label: "Today's focus", value: plan.focus },
+              { label: "Program week", value: programWeek > 0 ? `Week ${programWeek} of 12 · ${phaseName}` : "Not started" },
+              { label: "Next Testing Day", value: nextTest ? (nextTest === todayIso ? "Today" : `${shortDate(nextTest)} (Wednesday)`) : "Set new dates after Feb 10" },
+              { label: "Reminders", value: "Chat reminders: about 6:00 AM (morning plan) and about 9:30 PM (evening check-in)" },
+            ]} />
+            {currentBlock && currentBlock.routine && <Button variant="primary" label={`Start guided ${ROUTINES[currentBlock.routine].label.toLowerCase()}`} onClick={() => openStretch(currentBlock.routine)} />}
+            {currentBlock && !currentBlock.routine && currentBlock.k && !rec.c[currentBlock.k] && <Button variant="primary" label={`Done: ${labelFor(plan, currentBlock.k)}`} onClick={() => toggle(currentBlock.k as CheckKey)} />}
+            {!store.startDate && <Button label="Start week 1 today" onClick={() => setStore((s) => ({ ...s, startDate: todayIso }))} />}
+          </Section>
+
+          {isTestingDay && (
+            <Section heading="Testing Day today">
+              <Text>Only the 5-min warm-up this morning, then the tests at 6:30. Mobility score at 9:00 AM (Pliability or GOWOD), then the hip mini-block at 9:15. No TheStack training session today.</Text>
+              <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => setTab("assess")} />
+            </Section>
+          )}
+
+          <Section heading={`Today's checklist · ${doneCount} of ${items.length}`}>
+            <ProgressBar value={doneCount / items.length} label={firstOpen ? `Next small win: ${firstOpen.label}` : "Everything done today. Nice work."} />
+            <TapList items={items} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} />
+          </Section>
+
+          {todayDrills.length > 0 && (
+            <Section heading={`Today's drills · ${todayDrillsDone} of ${todayDrills.length}`}>
+              <ProgressBar value={todayDrillsDone / todayDrills.length} label="Tap a drill when you hit its finish line" />
+              <DrillList drills={todayDrills} done={drillDone} onTap={toggleDrill} showDays={false} />
+            </Section>
+          )}
+
+          {todayGames.length > 0 && (
+            <Section heading="Today's session scores">
+              {todayGames.map((g) => { const b = bestOf(g); const ts = todayScore(g.id); return (
+                <Fragment key={g.id}>
+                  <Input label={`${g.name}: ${g.scoring}${b !== undefined ? ` · Best ${b}` : ""}${ts ? ` · Today ${ts.score}` : ""}`} type="number" value={gameDraft[g.id] || ""} onChange={(v) => setGameDraft({ ...gameDraft, [g.id]: v })} />
+                  <Button label={`Save ${g.name}`} onClick={() => saveGame(g)} />
+                </Fragment>
+              ); })}
+            </Section>
+          )}
+
+          {roundDay && (
+            <Section heading={nineDay ? "Today's round · 9 holes, tee about 3:15 PM" : "Today's round · 18 holes, tee about 1:15 PM"}>
+              {nineDay && <Callout tone="info">9 holes until spring because sunset is about 5 PM after the Nov 1 clock change. Switch back to 18 when daylight allows, around mid-March.</Callout>}
+              {!nineDay && <Text>Done about 5:15, then a light dinner and nothing else tonight.</Text>}
+              <Input label="One focus for this round" value={round.focus || ""} placeholder="Tempo, small target, commit to the club..." onChange={(v) => updateRound({ focus: v })} />
+              <Input label={nineDay ? "9-hole score" : "18-hole score"} type="number" value={round.score || ""} onChange={(v) => updateRound({ score: v })} />
+              <Input label="Greens in regulation (optional)" value={round.gir || ""} onChange={(v) => updateRound({ gir: v })} />
+              <Input label="Total putts (optional)" value={round.putts || ""} onChange={(v) => updateRound({ putts: v })} />
+              <Button variant="primary" label="Save round score" onClick={saveRound} />
+            </Section>
+          )}
+
+          <Section heading="Energy, focus, notes">
+            <Rating label="Energy (1 low, 5 high)" value={rec.energy} onPick={(n) => updateToday({ energy: n })} />
+            <Rating label="Focus (1 low, 5 high)" value={rec.focus} onPick={(n) => updateToday({ focus: n })} />
+            <Input label="One line about today" value={rec.notes || ""} placeholder="Sore back, great wedges, slept badly..." onChange={(v) => updateToday({ notes: v })} />
+          </Section>
+
+          {todayKey === "Sun" && (
+            <Section heading="Weekly review (5 min)">
+              <Input label="1. What went well this week?" value={rec.win || ""} onChange={(v) => updateToday({ win: v })} />
+              <Input label="2. What got in the way?" value={rec.fix || ""} onChange={(v) => updateToday({ fix: v })} />
+              <Input label="3. One thing to change next week" value={rec.next || ""} onChange={(v) => updateToday({ next: v })} />
+              <Text>Then book next week's tee times: Monday 18 holes at about 1:15 PM and Friday 9 holes at about 3:15 PM (back to 18 on Fridays from about mid-March). Prep food for Monday and Tuesday. Good moment to export a backup (Log tab).</Text>
+            </Section>
+          )}
+
+          <Section heading="Streaks">
+            <Metrics metrics={[
+              { value: `${dayStreak}`, label: "Day streak", detail: "Days with 70% or more done" },
+              { value: `${mobStreak}`, label: "Mobility streak", detail: "Days in a row" },
+              { value: `${bedStreak}`, label: "Bed by 10 streak", detail: "Nights in a row" },
+              { value: `${drillStreak}`, label: "Drill streak", detail: "Drill days with at least one drill ticked" },
+            ]} />
+            {checkInDays > 0 && <Text>{`${checkInDays} check-in days logged so far. A missed day resets a streak, not your progress.`}</Text>}
+          </Section>
+
+          {weekHasData && <Section heading="This week, % of checklist done"><Columns points={weekPoints} emphasis={mondayOffset} /></Section>}
+          {heatHasData && <Section heading="Last 6 weeks"><CalendarHeatmap days={heatDays} max={100} note="Share of each day's checklist done" /></Section>}
+
+          <Section heading={`Today's timeline (${todayKey})`} caption="Suggested times; shift any block to fit your day." collapsible defaultOpen={false}>
+            <DayView start={6} end={23} events={routineEvents} mark={hourNow >= 6 && hourNow <= 23 ? { at: hourNow, label: "Now" } : undefined} />
+          </Section>
+
+          <Section heading="Safety note">
+            <Callout tone="info">This is general fitness guidance, not medical advice. Check with a doctor or physio before ramping up intensity, especially after a long lifting layoff. Pain (not effort) means stop and get it checked.</Callout>
+            <Text>{saved ? "Your check-ins are saved on this phone only. Export a backup now and then (Log tab)." : "This browser is not allowing storage here, so check-ins last only while the app stays open."}</Text>
+          </Section>
+        </Fragment>
+      )}
+
+      {tab === "drills" && (
+        <Fragment>
+          <Section heading="Show">
+            <Segmented<string>
+              options={[{ value: "Today", label: `Today (${todayDrills.length})` }, { value: "Power", label: "Power" }, { value: "Hips", label: "Hips" }, { value: "Golf", label: "Golf + home" }, { value: "Scores", label: "Scores" }, { value: "All", label: "All" }]}
+              value={drillView} onChange={(v) => setDrillView(v)}
+            />
+            <Text>Tap a drill when you reach its "done when" line. Ticks save to today's check-in.</Text>
+          </Section>
+          {drillView === "Today" && todayDrills.length > 0 && <Section heading={`${todayKey} drills · ${todayDrillsDone} of ${todayDrills.length}`}><DrillList drills={todayDrills} done={drillDone} onTap={toggleDrill} showDays={false} /></Section>}
+          {drillView === "Today" && todayDrills.length === 0 && <Section heading={`${todayKey}: rest day`}><Text>No drills today by design. Do the Sunday long stretch and the weekly review.</Text></Section>}
+          {(drillView === "Power" || drillView === "All") && (
+            <Section heading="Power + athletic drills" caption="Max effort, full rest, conservative volume for the layoff; stop any rep that hurts.">
+              <DrillList drills={DRILLS.filter((d) => d.group === "Power")} done={drillDone} onTap={toggleDrill} showDays={true} />
+              <Text>Tuesday's primer is jumps, bounds, hops and the shot-put throw. Thursday keeps the upper-body and rotational power but cuts leg volume because Friday is a round. Box jumps never go on TheStack days. Kneeling-jump swaps are listed above as "Swap option".</Text>
+            </Section>
+          )}
+          {(drillView === "Hips" || drillView === "All") && (
+            <Section heading="Hips: internal rotation + control" caption="Conservative sets and reps; the videos didn't give any.">
+              <Callout tone="warning">{HIP_SAFETY}</Callout>
+              <BulletList items={[
+                "Every day: 4-min hip mini-block right after the morning mobility routine (half-kneeling IR, quadruped band IR, supine 90/90 IR, isometric hip flexion; 1 set, about 1 min each). 6:30 most days, 6:28 Tue/Thu, 7:56 Sun, 9:15 on Testing Day (after the mobility test).",
+                "Wed + Sat, 7:04-7:14 after TheStack: hip block. Skip the three IR drills if done in the morning and use the time for the counterbalanced squat, Copenhagen plank, banded rockbacks or anti-valgus split squat.",
+                "Mon 1:00 + Fri 3:05, before the round: 4-min hip primer (a second dose, fine).",
+                "No split squats or Copenhagens on Thu or Sun (the days before rounds).",
+                "From the first video: band hip distractions mostly give temporary relief; active rotation work is the better use of your time.",
+              ]} />
+              <DrillList drills={DRILLS.filter((d) => d.group === "Hips")} done={drillDone} onTap={toggleDrill} showDays={true} />
+              <LinkCards links={[
+                { title: "Hip IR video", site: "youtube.com", href: "https://www.youtube.com/watch?v=PKDN2adjySY" },
+                { title: "Hip rehab short", site: "youtube.com", href: "https://www.youtube.com/shorts/UiD0uKwbc10" },
+              ]} />
+            </Section>
+          )}
+          {(drillView === "Golf" || drillView === "All") && <Section heading="Golf + home practice"><DrillList drills={DRILLS.filter((d) => d.group === "Golf")} done={drillDone} onTap={toggleDrill} showDays={true} /></Section>}
+          {(drillView === "Scores" || drillView === "All") && (
+            <Section heading="Session scores and bests">
+              <Table columns={["Score", "How it's scored", "Last", "Best", "Sessions"]} rows={GAMES.map((g) => { const rs = gameRecs(g.id); const b = bestOf(g); return [g.name, g.scoring, rs.length > 0 ? `${rs[rs.length - 1].score}` : "-", b !== undefined ? `${b}` : "-", `${rs.length}`]; })} align={["start", "start", "end", "end", "end"]} />
+              <Text>One score per session: wedges (random test), putting (make 10), sim (GIR and proximity), rounds (score, on the Log tab), TheStack (best speed).</Text>
+            </Section>
+          )}
+          <Section heading="Drills by day" collapsible defaultOpen={false}>
+            <Table columns={["Day", "Drills"]} rows={DAY_ORDER.map((k) => { const ds = DRILLS.filter((d) => d.days.indexOf(k) >= 0).map((d) => d.name); return [k, ds.length > 0 ? ds.join(", ") : "Rest day"]; })} emphasis={DAY_ORDER.indexOf(todayKey)} align={["start", "start"]} />
+          </Section>
+        </Fragment>
+      )}
+
+      {tab === "stretch" && (
+        <Fragment>
+          <Section heading="Pick a routine">
+            <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily 18 min (lift day)" : "Daily 20 min" }, { value: "warmup", label: "Warm-up 5 min" }, { value: "sunday", label: "Sunday 26 min" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
+            <Text>{`${ROUTINES[effRoutine].when}. Total ${mmss(routineSecs(effRoutine))}. Press Start; the timer moves through each move by itself, shows which side to do, and buzzes (Android) at each change.`}</Text>
+          </Section>
+          {(effRoutine === "daily" || effRoutine === "dailylift") && (
+            <Section heading="Daily rules">
+              <BulletList items={[
+                "Tue and Thu: skip the block 3 throws (the strength primer has throws).",
+                "TheStack days (Mon, Wed, Sat): this routine plus the 4-min hip mini-block is your warm-up; TheStack starts at 6:34.",
+                "Right after this routine: the 4-min daily hip mini-block (Today checklist / Drills > Hips).",
+                "Sore today: drop the kettlebell single-leg RDL.",
+              ]} />
+            </Section>
+          )}
+          <Section heading={`${ROUTINES[effRoutine].label} · ${stretchDoneN} of ${ROUTINES[effRoutine].moves.length} done`}>
+            <StretchPlayer key={effRoutine} moves={ROUTINES[effRoutine].moves} done={stretchDone} onSet={(id, v) => setStretch(effRoutine, id, v)} />
+          </Section>
+          {limited.length > 0 && <Section heading="Extra focus from your last test"><Table columns={["Limited screen", "Give these extra time"]} rows={limited.map((s) => [s.name, s.fix])} align={["start", "start"]} /></Section>}
+          <Section heading="Mobility routines (print version)" collapsible defaultOpen={false}>
+            <Section heading={`Daily mobility + strength · ${fmtRange(ROUTINES.daily.start, ROUTINES.daily.start + routineSecs("daily") / 3600)}`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("daily", ROUTINES.daily.start)} /></Section>
+            <Section heading={`Daily hip mini-block · 6:30-6:34 AM (6:28 Tue/Thu)`}><Table columns={["Time", "Exercise", "Sets x reps, rest", "Load"]} rows={sessionRows(at(HIP_MINI, T(6, 30)))} /></Section>
+            <Section heading={`5-min dynamic warm-up · ${fmtRange(ROUTINES.warmup.start, ROUTINES.warmup.start + routineSecs("warmup") / 3600)} before rounds`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("warmup", ROUTINES.warmup.start)} /></Section>
+            <Section heading={`Sunday long stretch · ${fmtRange(ROUTINES.sunday.start, ROUTINES.sunday.start + routineSecs("sunday") / 3600)}`}><Table columns={["Time", "Stretch", "Rounds x hold", "Cue"]} rows={stretchRows("sunday", ROUTINES.sunday.start)} /></Section>
+            <Text>Block 1 opens the range, block 2 builds strength in it, block 3 uses it at speed. Holds are seconds per side unless marked; back off if anything pinches.</Text>
+          </Section>
+        </Fragment>
+      )}
+
+      {tab === "plan" && (
+        <Fragment>
+          <Section heading="The week at a glance">
+            <Table columns={["Day", "Morning", "Evening"]} rows={DAY_ORDER.map((k) => [k, PLAN[k].am, PLAN[k].pm])} emphasis={DAY_ORDER.indexOf(todayKey)} />
+            <Text>{`Real rounds: Monday 18 holes (free from 1 PM, tee about 1:15, done about 5:15, quiet evening) and Friday 9 holes (free from 3 PM, tee about 3:15, done about 5:15). Friday stays at 9 until spring because of the 5 PM sunset after the Nov 1 clock change; switch back to 18 around mid-March. TheStack runs Mon, Wed and Sat: never on consecutive days, never the day before a round, and Thursday's legs stay moderate before Friday's round. GSPro sim 18s are light (front tees, no driver), so Tuesday and Thursday evenings are fine; Saturday is the swap option. Testing Days (${TESTING_DATES.map(shortDate).join(", ")}) replace that Wednesday's TheStack session. Evenings finish by about 8:30.`}</Text>
+          </Section>
+          <Section heading="Workout plan">
+            <Segmented<string> options={[...DAY_ORDER, { value: "All", label: "All 7 days" }, { value: "Test", label: "Testing Day" }]} value={planDay} onChange={(v) => setPlanDay(v)} />
+            <Text>Opens on today. Pick "All 7 days" for the full plain version to screenshot or print.</Text>
+          </Section>
+          {planList.map((p) => (
+            <Section key={p.testing ? "test" : p.key} heading={`${p.testing ? "Testing Day (Wed)" : p.key} · ${p.focus}`}>
+              <Table columns={["Time", "Block"]} rows={buildBlocks(p).map((b) => [fmtRange(b.s, b.e), b.t])} />
+              {[...p.parts].sort((a, b) => partStart(a) - partStart(b)).map((pt, i) => pt.kind === "stretch" ? (
+                <Section key={`${p.key}-${i}`} heading={`${fmtRange(pt.start, partEnd(pt))} · ${ROUTINES[pt.routine].label}`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows(pt.routine, pt.start)} /></Section>
+              ) : (
+                <Section key={`${p.key}-${i}`} heading={`${fmtRange(pt.s.start, partEnd(pt))} · ${pt.s.name}`}><Table columns={["Time", "Exercise", "Sets x reps, rest", "Load"]} rows={sessionRows(pt.s)} /><Text>{pt.s.goal}</Text></Section>
+              ))}
+            </Section>
+          ))}
+        </Fragment>
+      )}
+
+      {tab === "phases" && (
+        <Fragment>
+          <Section heading="Three 4-week phases">
+            <Table columns={["Phase", "Lifting + power", "Speed work", "Speed goal"]} rows={[
+              ["1. Foundation (wk 1-4)", "Bench 3x5 at 90-100 lb; trap bar light, +10 lb/week; power primers at bodyweight or light balls", "Restart TheStack; baseline 98 mph on 10/21/26; Testing Day 11/18", "Re-establish 98-100 mph"],
+              ["2. Build (wk 5-8)", "Bench 4x5 at 100-110 lb; trap bar 4x5; standing then step-in overhead throws", "Next TheStack stage; Testing Day 12/16", "About 102 mph"],
+              ["3. Power + speed (wk 9-12)", "Bench 3x3-5 at 110-120 lb; trap bar 3x3; light barbell for SL RDL hops if clean", "TheStack at full intent; Testing Day 1/13", "About 105 mph"],
+              ["Beyond week 12", "Repeat the cycle from your new numbers", "Testing Day 2/10, then every 4 weeks", "Push toward 110 mph"],
+            ]} />
+          </Section>
+          <Section heading="Speed goal path" caption="Goals, not guarantees. Progress varies; 110 mph may take longer than 12 weeks.">
+            <LineChart points={[{ label: "10/21 baseline", value: 98 }, { label: "Wk 4", value: 100 }, { label: "Wk 8", value: 102 }, { label: "Wk 12", value: 105 }, { label: "Later", value: 110 }]} floor={95} ceiling={112} unit="mph" labels={["Goal"]} format={(v) => `${v} mph`} />
+          </Section>
+          <Section heading="Progression rules">
+            <Steps steps={[
+              { title: "Add weight only when it is easy", detail: "Bench +5 lb or trap bar +10 lb next week when every set felt RPE 7 or easier with clean form." },
+              { title: "Hold or drop when it is not", detail: "Missed reps, bad sleep, or joint aches: repeat the weight, or drop 10% for a week." },
+              { title: "Fresh legs for rounds", detail: "Thursday legs stay moderate and Friday morning is mobility only, because Friday is a round." },
+              { title: "Testing Day every 4 weeks", detail: `${TESTING_DATES.map(shortDate).join(", ")}: club speed, broad jump, throws, chest pass, mobility score (Tests tab). That week, one less set per lift.` },
+              { title: "Hamstrings: weak and tight, so go slow", detail: "3 s lowering on RDLs and curls builds strength through length. Add a little load or a rep every 1-2 weeks; stop if you cramp or feel sharp pain. Retest toe touch and active straight-leg raise every Testing Day." },
+              { title: "Power is max effort, full rest", detail: "Stop a power set as soon as reps slow down; quality over volume." },
+              { title: "No max-out testing needed", detail: "Track working weights; skip 1-rep maxes, especially after the layoff." },
+            ]} />
+          </Section>
+          <Section heading="Before you ramp up"><Callout tone="info">General fitness guidance only. Get a doctor or physio to clear you before heavy, jumping or max-intent work, and stop any exercise that causes pain.</Callout></Section>
+        </Fragment>
+      )}
+
+      {tab === "log" && (
+        <Fragment>
+          <Section heading="Add an entry">
+            <Select<LogKind> label="What" options={LOG_KINDS.map((k) => ({ value: k.value, label: k.label }))} value={logKind} onChange={(v) => setLogKind(v)} />
+            <Input label="Value" type="number" value={logValue} placeholder={logKind === "speed" ? "98" : logKind === "hcp" ? "16" : ""} onChange={(v) => setLogValue(v)} />
+            <Input label="Date (YYYY-MM-DD)" value={logDate} onChange={(v) => setLogDate(v)} />
+            <Button variant="primary" label="Save entry" onClick={addLog} />
+            {store.logs.length > 0 && <Button label="Undo last entry" onClick={undoLog} />}
+          </Section>
+          {speedLogs.length >= 2 ? (
+            <Section heading="Driver club speed">
+              <LineChart points={lineFrom(speedLogs)} floor={Math.min(90, ...speedLogs.map((l) => l.value))} ceiling={Math.max(115, ...speedLogs.map((l) => l.value))} unit="mph" labels={["Club speed"]} secondary={{ label: "Goal 110", values: speedLogs.map(() => 110) }} format={(v) => `${v} mph`} />
+              <Text>{`Best so far: ${bestSpeed} mph. The first point is the 10/21/26 baseline: ${BASELINE_NOTE}`}</Text>
+            </Section>
+          ) : (
+            <Section heading="Speed baseline · TheStack R-Speed, 10/21/26">
+              <LineChart points={BASELINE_SWINGS} floor={88} ceiling={100} unit="mph" labels={["Swing speed"]} format={(v) => `${v} mph`} />
+              <Text>{`Logged as your first speed entry: 98 mph max, 95 average. ${BASELINE_NOTE} Your trend chart starts here once you log the next session.`}</Text>
+            </Section>
+          )}
+          {benchLogs.length >= 2 && <Section heading="Bench working weight"><LineChart points={lineFrom(benchLogs)} floor={0} ceiling={Math.max(225, ...benchLogs.map((l) => l.value))} unit="lb" labels={["Bench"]} format={(v) => `${v} lb`} /></Section>}
+          {trapLogs.length >= 2 && <Section heading="Trap bar working weight"><LineChart points={lineFrom(trapLogs)} floor={0} ceiling={Math.max(225, ...trapLogs.map((l) => l.value))} unit="lb" labels={["Trap bar"]} format={(v) => `${v} lb`} /></Section>}
+          {scoreLogs.length > 0 && <Section heading="Round scores and handicap"><Table columns={["Date", "Type", "Value"]} rows={scoreLogs.slice(0, 12).map((l) => [shortDate(l.date), l.note ? `${nameOf(l.kind)} · ${l.note}` : nameOf(l.kind), `${l.value}`])} /></Section>}
+          {store.logs.length > 0 && <Section heading="Recent entries"><Table columns={["Date", "Type", "Value"]} rows={[...store.logs].reverse().slice(0, 10).map((l) => [shortDate(l.date), l.note ? `${nameOf(l.kind)} · ${l.note}` : nameOf(l.kind), `${l.value}${unitOf(l.kind) ? ` ${unitOf(l.kind)}` : ""}`])} /></Section>}
+          <Section heading="Backup" caption="Everything lives on this phone only. Export now and then; import to restore or move to a new phone.">
+            <Callout tone="info">Moving from the old flypod.page link? Each web address keeps its own data. On the old link, tap Export first, then open the new link (soulztek.github.io/golf-plan) and Import that file. The old link stops working on Nov 5.</Callout>
+            <BackupBox store={store} onImport={(s) => setStore(s)} />
+          </Section>
+        </Fragment>
+      )}
+
+      {tab === "assess" && (
+        <Fragment>
+          <Section heading="Testing Day · every 4 weeks">
+            <Properties items={[
+              { label: "Next", value: nextTest ? (nextTest === todayIso ? "Today" : `${shortDate(nextTest)}/${nextTest.slice(2, 4)} (Wednesday)`) : "Pick new dates" },
+              { label: "Schedule", value: TESTING_DATES.map(shortDate).join(", ") },
+              { label: "Morning", value: "6:25 warm-up, 6:30-7:08 tests (replaces TheStack)" },
+              { label: "Mobility score", value: "9:00 AM, Pliability or GOWOD; hip mini-block after, at 9:15" },
+            ]} />
+            <Steps steps={[
+              { title: "TheStack R-Speed test", detail: "8 swings, GT2, barefoot air swings, same as the 10/21 baseline." },
+              { title: "Rapsodo with a ball", detail: "5 max drives in shoes; record best club and ball speed." },
+              { title: "Broad jump", detail: "3 attempts, measure heel to the start line, keep the best (inches)." },
+              { title: "Rotational slam ball throw", detail: "Same ball every time; 3 per side, best distance each side (feet)." },
+              { title: "Seated chest pass", detail: "Back against a wall, same ball, 3 attempts, best distance (feet)." },
+              { title: "Toe touch + active straight-leg raise", detail: "Hamstring retest: how far from your toes, and ASLR degrees on each side (phone angle app)." },
+              { title: "Mobility score at 9:00", detail: "Pliability or GOWOD; use the same app each time." },
+            ]} />
+          </Section>
+          <Section heading="Record Testing Day results">
+            {TEST_FIELDS.map((f) => <Input key={f.id} label={f.label} value={testDraft[f.id] || ""} onChange={(v) => setTestDraft({ ...testDraft, [f.id]: v })} />)}
+            <Button variant="primary" label="Save Testing Day results" onClick={saveTests} />
+            <Text>Saving also adds the R-Speed max and ball speed to the Log tab.</Text>
+          </Section>
+          <Section heading="Testing Day history">
+            <Table columns={["Test", ...testHistory.map((r) => (r.date === BASELINE_TEST.date ? "10/21 base" : shortDate(r.date)))]} rows={TEST_FIELDS.map((f) => [f.label, ...testHistory.map((r) => r.v[f.id] || "-")])} align={["start", "end", "end", "end", "end", "end"]} />
+          </Section>
+          <Section heading="Baseline speed · 10/21/26" collapsible defaultOpen={false}>
+            <Properties items={[
+              { label: "Test", value: "TheStack app, R-Speed test" }, { label: "Driver", value: "Titleist GT2" }, { label: "Conditions", value: "Barefoot, indoors, air swings (no ball)" },
+              { label: "Swings", value: "8" }, { label: "Max", value: "98 mph (swings 5 and 6)" }, { label: "Average", value: "95 mph" }, { label: "Min", value: "92 mph" },
+            ]} />
+            <LineChart points={BASELINE_SWINGS} floor={88} ceiling={100} unit="mph" labels={["Swing speed"]} format={(v) => `${v} mph`} />
+            <Text>{`Swings 5-8 are exact from the app; swings 1-4 are estimates read off its chart. ${BASELINE_NOTE}`}</Text>
+          </Section>
+          <Section heading="Apps to measure mobility">
+            <LinkCards links={[
+              { title: "Pliability mobility test: phone-camera, full-body range-of-motion score in about 3 minutes", site: "home.pliability.com", href: "https://home.pliability.com/mobility-test" },
+              { title: "GOWOD mobility test: guided 10-test self-assessment (about 12-15 min), overall score plus shoulders, overhead, thorax, hips, posterior chain and ankles", site: "gowod.app", href: "https://www.gowod.app/" },
+              { title: "DRVN Golf Fitness Handicap: free, 5 golf-specific mobility tests", site: "drvngolf.com", href: "https://drvngolf.com/golf-fitness-handicap" },
+            ]} />
+            <Text>GOWOD's FAQ advises testing at least 2 hours after waking with no mobility work beforehand, and says a free account includes one test, so check the app for retest options. The official TPI screen needs a TPI-certified pro (MyTPI app). The screens below are a self-check you can film or measure with a phone angle app.</Text>
+          </Section>
+          <Section heading="Mobility screens (TPI-style)" caption="Retest on each Testing Day, filmed from the same spot.">
+            <Table columns={["Screen", "How", "What good looks like"]} rows={SCREENS.map((s) => [s.name, s.how, s.good])} />
+          </Section>
+          <Section heading="If a screen is limited, these moves target it">
+            <Table columns={["Screen", "Moves (Mobility tab)"]} rows={SCREENS.map((s) => [s.name, s.fix])} />
+          </Section>
+          <Section heading="Record today's screens">
+            {SCREENS.map((s) => (
+              <Fragment key={s.id}>
+                <Select<string> label={s.name} options={RESULT_OPTS} value={draftAssess[s.id] || "Not tested"} onChange={(v) => setDraftAssess({ ...draftAssess, [s.id]: v })} />
+                <Input label={`${s.name}: angle, seconds, or note`} value={assessNote[s.id] || ""} placeholder="e.g. L 40, R 30" onChange={(v) => setAssessNote({ ...assessNote, [s.id]: v })} />
+              </Fragment>
+            ))}
+            <Button variant="primary" label={store.assess.length === 0 ? "Save as baseline" : "Save retest"} onClick={saveAssess} />
+          </Section>
+          {store.assess.length > 0 && (
+            <Section heading="Screen history">
+              <Table columns={["Screen", ...store.assess.slice(-3).map((a) => shortDate(a.date))]} rows={SCREENS.map((s) => [s.name, ...store.assess.slice(-3).map((a) => a.results[s.id] || "")])} />
+            </Section>
+          )}
+        </Fragment>
+      )}
+
+      {tab === "food" && (
+        <Fragment>
+          <Section heading="Protein"><BulletList items={["Aim for about 0.7-1.0 g of protein per lb of bodyweight per day, a common range for people strength training.", "Easiest way: a palm-to-hand-sized portion at every meal, plus one protein snack.", "Easy options: eggs, Greek yogurt, chicken, fish, lean beef, cottage cheese, a protein shake."]} /></Section>
+          <Section heading="Water"><BulletList items={["Start the day with a full glass of water before coffee.", "Refill one bottle each morning, mid-work, and after work.", "Add a bottle on training days and during rounds; pale yellow urine is a simple check."]} /></Section>
+          <Section heading="Meal timing around training">
+            <Rows rows={[
+              { lead: "6:00", title: "Before an early session", detail: "Something small if hungry: banana, toast, or yogurt." },
+              { lead: "7:20", title: "After training", detail: "Real breakfast with protein and carbs by 8:00." },
+              { lead: "4:00", title: "Before practice or a round", detail: "Snack: fruit plus protein, or a bar." },
+              { lead: "Round", title: "Mon 18 (1:15) and Fri 9 (3:15)", detail: "Early lunch before Monday's round; snack at the turn and every few holes; light dinner after." },
+              { lead: "Evening", title: "Dinner 2-3 hours before bed", detail: "On round nights keep it light so the 10:00 bedtime holds." },
+            ]} />
+          </Section>
+          <Section heading="Simple rules, not a diet"><BulletList items={["Plate: half vegetables or fruit, a quarter protein, a quarter carbs.", "Keep caffeine to the morning and early afternoon so it does not fight bedtime.", "Keep alcohol light, especially the night before training or a round.", "Sunday meal prep makes Monday and Tuesday automatic.", "One off-plan meal is not a failure; the next meal is the reset."]} /></Section>
+        </Fragment>
+      )}
+    </Page>
+  );
+}
