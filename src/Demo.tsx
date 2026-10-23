@@ -57,3 +57,6 @@ export function DemoBlock(props: { id: string; defaultOpen?: boolean }) {
     </div>
   );
 }
+
+export function demoThumb(id?: string): string | null { const d = id ? DEMOS[id] : null; return d && d.img ? BASE + d.img : null; }
+export function demoVideo(id?: string): any | null { const d = id ? DEMOS[id] : null; return d && d.videos ? d.videos[0] : null; }

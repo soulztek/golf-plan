@@ -3,11 +3,11 @@ import React, { Fragment, useState, useEffect, useMemo, useRef, ReactNode } from
 export { Fragment, useState, useEffect, useMemo };
 
 const THEME = {
-  radius: { sm: 6, md: 8, lg: 14, xl: 18, full: 999 },
-  border: { default: "#24402f", strong: "#4c7a5e", focus: "#5cc98a" },
-  fill: { primary: "#2f9e5c", secondary: "#1b3326", accentSubtle: "rgba(92,201,138,0.14)", controlChecked: "#2f9e5c" },
-  bg: { base: "#0b1510", elevated: "#13231a", sunken: "#0e1b14" },
-  text: { primary: "#eef5ef", secondary: "#a9c2b1", tertiary: "#7c9886", onPrimary: "#ffffff", link: "#8fe0b0" },
+  radius: { sm: 8, md: 10, lg: 16, xl: 20, full: 999 },
+  border: { default: "var(--border)", strong: "var(--border-strong)", focus: "var(--focus)" },
+  fill: { primary: "var(--primary)", secondary: "var(--fill2)", accentSubtle: "var(--accent-subtle)", controlChecked: "var(--primary)" },
+  bg: { base: "var(--bg)", elevated: "var(--elev)", sunken: "var(--card)" },
+  text: { primary: "var(--text)", secondary: "var(--text2)", tertiary: "var(--text3)", onPrimary: "#ffffff", link: "var(--link)" },
   font: {
     family: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     body1: { fontSize: 17, lineHeight: "24px" },
@@ -16,7 +16,7 @@ const THEME = {
     heading2: { fontSize: 22, lineHeight: "28px" },
   },
   weight: { regular: 400, medium: 500, semibold: 600, bold: 700 },
-  dataviz: { categorical: ["#5cc98a", "#f2c94c", "#56a3f2", "#e07a5f"] },
+  dataviz: { categorical: ["#2f9e5c", "#f2a93b", "#2f7fd8", "#e07a5f"] },
 };
 export function useGrokTheme() { return THEME; }
 const t = THEME;
@@ -41,7 +41,7 @@ export function Page(props: { title: string; summary?: string; width?: string; c
 export function Section(props: { heading?: string; caption?: string; collapsible?: boolean; defaultOpen?: boolean; children?: ReactNode }) {
   const [open, setOpen] = useState<boolean>(props.collapsible ? !!props.defaultOpen : true);
   return (
-    <section style={{ background: t.bg.sunken, border: `1px solid ${t.border.default}`, borderRadius: t.radius.xl, padding: 14, display: "grid", gap: 12, minWidth: 0 }}>
+    <section style={{ background: t.bg.sunken, border: `1px solid ${t.border.default}`, borderRadius: 20, boxShadow: "var(--shadow)", padding: 16, display: "grid", gap: 12, minWidth: 0 }}>
       {props.heading && (
         <div onClick={props.collapsible ? () => setOpen(!open) : undefined} role={props.collapsible ? "button" : undefined} aria-expanded={props.collapsible ? open : undefined} tabIndex={props.collapsible ? 0 : undefined} onKeyDown={props.collapsible ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } } : undefined} style={{ cursor: props.collapsible ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div>
@@ -62,7 +62,7 @@ export function Text(props: { children?: ReactNode }) {
 
 export function Callout(props: { tone?: string; children?: ReactNode }) {
   const c = props.tone === "warning" ? "#f2c94c" : props.tone === "danger" ? "#e07a5f" : "#56a3f2";
-  return <div style={{ borderLeft: `4px solid ${c}`, background: "rgba(255,255,255,0.04)", borderRadius: t.radius.md, padding: "10px 12px", fontSize: 15, lineHeight: "21px" }}>{props.children}</div>;
+  return <div style={{ borderLeft: `4px solid ${c}`, background: "var(--fill2)", borderRadius: t.radius.md, padding: "10px 12px", fontSize: 15, lineHeight: "21px" }}>{props.children}</div>;
 }
 
 export function BulletList(props: { items: ReactNode[] }) {
@@ -91,7 +91,7 @@ export function Table(props: { columns: string[]; rows: ReactNode[][]; align?: s
         </thead>
         <tbody>
           {props.rows.map((r, ri) => (
-            <tr key={ri} style={{ background: ri === props.emphasis ? t.fill.accentSubtle : ri % 2 ? "rgba(255,255,255,0.02)" : "transparent" }}>
+            <tr key={ri} style={{ background: ri === props.emphasis ? t.fill.accentSubtle : ri % 2 ? "var(--zebra)" : "transparent" }}>
               {r.map((c, ci) => <td key={ci} style={{ padding: "8px 10px", verticalAlign: "top", borderTop: `1px solid ${t.border.default}`, textAlign: (props.align?.[ci] === "end" ? "right" : "left") as any, fontWeight: ci === 0 ? 600 : 400 }}>{c}</td>)}
             </tr>
           ))}
@@ -270,7 +270,7 @@ export function CalendarHeatmap(props: { days: { date: string; value: number }[]
     <div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
         {props.days.map((d) => (
-          <div key={d.date} title={`${d.date}: ${d.value}%`} style={{ aspectRatio: "1", borderRadius: 4, background: d.value > 0 ? `rgba(92,201,138,${0.2 + 0.8 * (d.value / max)})` : t.fill.secondary }} />
+          <div key={d.date} title={`${d.date}: ${d.value}%`} style={{ aspectRatio: "1", borderRadius: 4, background: d.value > 0 ? `rgba(47,158,92,${0.2 + 0.8 * (d.value / max)})` : t.fill.secondary }} />
         ))}
       </div>
       {props.note && <div style={{ fontSize: 12, color: t.text.tertiary, marginTop: 6 }}>{props.note}</div>}

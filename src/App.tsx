@@ -3,7 +3,8 @@ import {
   Page, Section, Text, Callout, BulletList, Steps, Table, Rows, Properties, Segmented, Select, Input, Button,
   LineChart, Columns, CalendarHeatmap, DayView, Metrics, LinkCards, Fragment, useState, useEffect, useMemo, useGrokTheme,
 } from "./kit";
-import { DemoBlock, demoKind } from "./Demo";
+import { DemoBlock, demoKind, demoThumb } from "./Demo";
+import { BottomNav, Hero, ScreenTitle, StatCard, CategoryCard, WorkoutCard, ExerciseRow, MenuRow, SectionTitle, Chip, Bar, Icon, PHOTO } from "./Shell";
 import { DEMOS, FEDB_USED } from "./demos.generated";
 
 type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
@@ -836,12 +837,54 @@ function WedgeCounter(props: { rec: WedgeRec; canSwitch: boolean; onShot: (i: nu
   );
 }
 
+// ---------- Redesign: categories + workouts ----------
+const DAILY_KEYS: CheckKey[] = ["wake", "mobility", "hipmini", "protein", "water", "screens", "bed", "recovery", "review"];
+const WORK_KEYS: CheckKey[] = ["strength", "speed", "hips"];
+const GOLF_KEYS: CheckKey[] = ["wedges", "putting", "sim", "eighteen", "nine"];
+const TRAIN_KEYS: CheckKey[] = ["mobility", "hipmini", "strength", "speed", "hips", "wedges", "putting", "sim", "eighteen", "nine", "recovery"];
+const UI_KEY = "golf-speed-plan-ui";
+const DEMO_RULES: [RegExp, string][] = [
+  [/trap bar jump/i, "trapjump"], [/lateral bound/i, "bound"], [/single-leg RDL to knee/i, "slrdl"], [/shot-put/i, "shotput"],
+  [/^Trap bar deadlift/i, "trapdl"], [/^Bench press/i, "bench"], [/Romanian deadlift/i, "hamrdl"], [/Nordic/i, "hamnordic"],
+  [/lateral lunge/i, "latlunge"], [/step-in overhead/i, "stepin"], [/scoop toss into wall/i, "scoop"], [/kneeling jump/i, "kneeljump"],
+  [/box\/bench jump/i, "boxjump"], [/chest pass/i, "chestpass"], [/bent-over row/i, "row"], [/split squat/i, "splitsq"],
+  [/plyo push/i, "plyopush"], [/glute bridge/i, "hambridge"], [/Build-up swings/i, "buildup"], [/TheStack session/i, "thestack"],
+  [/TheStack R-Speed/i, "thestack"], [/Broad jump/i, "broad"], [/Rotational slam ball throw/i, "rotthrow"],
+  [/half-kneeling hip internal/i, "hip1"], [/Quadruped band/i, "hip2"], [/Supine 90\/90/i, "hip3"], [/Counterbalanced/i, "hip5"],
+  [/Copenhagen/i, "hip8"], [/isometric hip flexion/i, "hip6"], [/KB single-leg RDL/i, "hamslrdl"], [/Banded hamstring curl/i, "hamcurl"],
+];
+const demoFor = (e: any): string | undefined => { if (e.demo) return e.demo; const r = DEMO_RULES.find((x) => x[0].test(e.name)); return r ? r[1] : undefined; };
+const DRILL_IDS = new Set(DRILLS.map((d) => d.id));
+interface Workout { id: string; title: string; sub: string; s: Omit<Session, "start">; days: DayKey[]; key?: CheckKey; fallback: string; optional?: boolean; testing?: boolean; when: string; }
+const SWAPS: Omit<Session, "start"> = {
+  name: "Kneel-jump swaps", goal: "Swap if knees/landing feel off: pick ONE of these for Thursday's 2-min kneeling-jump slot (same time). Max intent, soft landings.",
+  items: DRILLS.filter((d) => d.id.startsWith("swap_")).map((d) => ({ name: d.name.replace("Swap option: ", ""), dose: d.reps, rest: "-", load: d.cue, min: 2, demo: d.id } as any)),
+};
+const WORKOUTS: Workout[] = [
+  { id: "tests", title: "Testing Day tests", sub: "Speed, jumps, throws, hamstring retest", s: TESTS_AM, days: [], key: "speed", fallback: "📏", testing: true, when: "Testing Day, 6:30 AM" },
+  { id: "strA", title: "Strength A", sub: "Power primer, trap bar, bench, hamstrings", s: STRENGTH_A, days: ["Tue"], key: "strength", fallback: "🏋️", when: "Tue 6:32 AM" },
+  { id: "strB", title: "Strength B", sub: "Upper + rotational power, moderate legs", s: STRENGTH_B, days: ["Thu"], key: "strength", fallback: "💪", when: "Thu 6:32 AM" },
+  { id: "stack", title: "TheStack speed", sub: "Speed session + Rapsodo transfer", s: SPEED, days: ["Mon", "Wed", "Sat"], key: "speed", fallback: "⚡", when: "Mon/Wed/Sat 6:34 AM" },
+  { id: "hipmini", title: "Daily hip mini-block", sub: "4 min after the morning routine", s: HIP_MINI, days: ALL7, key: "hipmini", fallback: "🦵", when: "Every day, 6:30 (6:28 Tue/Thu)" },
+  { id: "hipblock", title: "Hip block", sub: "10 min after TheStack", s: HIP_BLOCK, days: ["Wed", "Sat"], key: "hips", fallback: "🌀", when: "Wed/Sat 7:04 AM" },
+  { id: "primer", title: "Pre-round hip primer", sub: "4 min before the round", s: HIP_PRIMER, days: ["Mon", "Fri"], key: "hips", fallback: "⛳", when: "Mon 1:00 PM, Fri 3:05 PM" },
+  { id: "ham", title: "Hamstring add-on", sub: "Optional, after the hip block", s: HAM_SAT, days: ["Sat"], fallback: "🦿", optional: true, when: "Sat 7:14 AM (optional)" },
+  { id: "swaps", title: "Kneel-jump swaps", sub: "Swap if knees/landing feel off", s: SWAPS, days: ["Thu"], fallback: "🔁", optional: true, when: "Thu, in place of the kneeling jump" },
+];
+function loadUi(): { name?: string; dark?: boolean } { try { return JSON.parse(window.localStorage.getItem(UI_KEY) || "{}"); } catch (_e) { return {}; } }
+
 export default function App() {
   const initial = useMemo(() => loadStore(), []);
   const [store, setStore] = useState<Store>(initial.store);
   const [saved, setSaved] = useState<boolean>(initial.ok);
   const [now, setNow] = useState<Date>(nyNow());
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<string>("menu");
+  const [nav, setNav] = useState<string>("home");
+  const [detail, setDetail] = useState<string | null>(null);
+  const [player, setPlayer] = useState<number | null>(null);
+  const [openEx, setOpenEx] = useState<number | null>(null);
+  const [ui, setUi] = useState<{ name?: string; dark?: boolean }>(loadUi());
+  const [speedDraft, setSpeedDraft] = useState<string>("");
   const [planDay, setPlanDay] = useState<string>(JS_DAYS[nyNow().getDay()]);
   const [routine, setRoutine] = useState<RoutineKey>(nyNow().getDay() === 0 ? "sunday" : "daily");
   const [drillView, setDrillView] = useState<string>("Today");
@@ -862,7 +905,9 @@ export default function App() {
   useEffect(() => {
     try { window.localStorage.setItem(STORE_KEY, JSON.stringify(store)); setSaved(true); } catch (_e) { setSaved(false); }
   }, [store]);
-  useEffect(() => { window.scrollTo(0, 0); }, [tab]);
+  useEffect(() => { window.scrollTo(0, 0); }, [tab, nav, detail]);
+  useEffect(() => { try { window.localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_e) {} document.documentElement.setAttribute("data-theme", ui.dark ? "dark" : "light"); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", ui.dark ? "#0b1510" : "#f3f6f9"); }, [ui]);
+  const go = (where: string) => { setDetail(null); setPlayer(null); if (where === "stretch") { setNav("daily"); window.setTimeout(() => { const el = document.getElementById("timer"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); } else if (["home", "daily", "workout", "golf"].indexOf(where) >= 0) setNav(where); else { setNav("more"); setTab(where); } };
 
   const todayIso = iso(now);
   const todayKey = JS_DAYS[now.getDay()];
@@ -885,7 +930,7 @@ export default function App() {
     const c = r !== "warmup" && all ? { ...cur.c, mobility: true } : cur.c;
     return { ...s, days: { ...s.days, [todayIso]: { ...cur, stretch: st, c } } };
   });
-  const openStretch = (r?: RoutineKey) => { setRoutine(r ? (r === "dailylift" ? "daily" : r) : todayKey === "Sun" ? "sunday" : "daily"); setTab("stretch"); };
+  const openStretch = (r?: RoutineKey) => { setRoutine(r ? (r === "dailylift" ? "daily" : r) : todayKey === "Sun" ? "sunday" : "daily"); go("stretch"); };
   const toggleDrill = (id: string) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; const dr = { ...(cur.drills || {}), [id]: !(cur.drills && cur.drills[id]) }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, drills: dr } } }; });
   const updateRound = (patch: RoundStats) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, round: { ...(cur.round || {}), ...patch } } } }; });
 
@@ -994,22 +1039,78 @@ export default function App() {
   const stretchDoneN = ROUTINES[effRoutine].moves.filter((m) => stretchDone[m.id]).length;
   const planList: DayPlan[] = planDay === "Test" ? [TEST_PLAN] : planDay === "All" ? DAY_ORDER.map((k) => PLAN[k]) : [PLAN[planDay as DayKey]];
 
-  return (
-    <Page title="Golf Speed Plan" summary="98 mph baseline → 110 mph goal · daily check-ins, mobility timer, drills, speed log. Every time and number is a suggestion you can adjust.">
-      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#0b1510", padding: "8px 0", margin: "0 -14px", paddingLeft: 14, paddingRight: 14, borderBottom: "1px solid #24402f" }}>
-        <Segmented<Tab>
-          options={[
-            { value: "today", label: "Today" }, { value: "drills", label: "Drills" }, { value: "stretch", label: "Mobility" }, { value: "plan", label: "Plan" },
-            { value: "phases", label: "12 weeks" }, { value: "log", label: "Log" }, { value: "assess", label: "Tests" }, { value: "food", label: "Food" },
-          ]}
-          value={tab}
-          onChange={(v) => setTab(v)}
-        />
-      </div>
+  // ----- Redesign derived values -----
+  const itemsIn = (keys: CheckKey[]) => items.filter((i) => keys.indexOf(i.key) >= 0);
+  const dailyItems = itemsIn(DAILY_KEYS); const workItems = itemsIn(WORK_KEYS); const golfItems = itemsIn(GOLF_KEYS);
+  const fracOf = (arr: { done: boolean }[]) => (arr.length ? arr.filter((i) => i.done).length / arr.length : 0);
+  const dayPct = Math.round((items.length ? doneCount / items.length : 0) * 100);
+  const seenK: Record<string, boolean> = {};
+  const minutesDone = Math.round(blocks.filter((b) => b.k && TRAIN_KEYS.indexOf(b.k) >= 0 && rec.c[b.k]).reduce((a, b) => a + (b.e - b.s) * 60, 0));
+  const minutesPlanned = Math.round(blocks.filter((b) => b.k && TRAIN_KEYS.indexOf(b.k) >= 0 && plan.checks.indexOf(b.k) >= 0).reduce((a, b) => a + (b.e - b.s) * 60, 0));
+  const lastSpeed = speedLogs.length ? speedLogs[speedLogs.length - 1].value : 98;
+  const catOf = (k: CheckKey) => (WORK_KEYS.indexOf(k) >= 0 ? "workout" : GOLF_KEYS.indexOf(k) >= 0 ? "golf" : "daily");
+  const blockFor = (k: CheckKey) => blocks.find((b) => b.k === k && b.e > hourNow) || blocks.find((b) => b.k === k);
+  const openItems = items.filter((i) => !i.done).map((i) => ({ ...i, b: blockFor(i.key) })).sort((a, b) => ((a.b ? a.b.s : 30) - (b.b ? b.b.s : 30)));
+  const upNext = openItems.find((i) => i.b && i.b.e > hourNow) || openItems[0];
+  const greetWord = hourNow < 12 ? "Good morning" : hourNow < 17 ? "Good afternoon" : "Good evening";
+  const wIsToday = (w: Workout) => (w.testing ? isTestingDay : w.days.indexOf(todayKey) >= 0 && !(isTestingDay && w.id === "stack"));
+  const wRowKey = (w: Workout, i: number) => `w:${w.id}:${i}`;
+  const wRowDone = (w: Workout, i: number) => { const id = demoFor(w.s.items[i]); return !!(drillDone[wRowKey(w, i)] || (id && DRILL_IDS.has(id) && drillDone[id])); };
+  const wDoneN = (w: Workout) => w.s.items.filter((_e, i) => wRowDone(w, i)).length;
+  const setRow = (w: Workout, i: number, v: boolean) => setStore((st) => { const cur = st.days[todayIso] || { c: {} }; const dr = { ...(cur.drills || {}), [wRowKey(w, i)]: v }; const id = demoFor(w.s.items[i]); if (id && DRILL_IDS.has(id)) dr[id] = v; return { ...st, days: { ...st.days, [todayIso]: { ...cur, drills: dr } } }; });
+  const finishWorkout = (w: Workout) => { setPlayer(null); if (w.key) setStore((st) => { const cur = st.days[todayIso] || { c: {} }; return { ...st, days: { ...st.days, [todayIso]: { ...cur, c: { ...cur.c, [w.key as string]: true } } } }; }); };
+  const wThumb = (w: Workout) => { for (const e of w.s.items) { const t2 = demoThumb(demoFor(e)); if (t2) return t2; } return null; };
+  const todayWorkouts = WORKOUTS.filter(wIsToday);
+  const otherWorkouts = WORKOUTS.filter((w) => !wIsToday(w) && !w.testing);
+  const curW = detail ? WORKOUTS.find((w) => w.id === detail) : undefined;
+  const golfDrillsToday = todayDrills.filter((d) => d.group === "Golf");
+  const workDrillsToday = todayDrills.filter((d) => d.group !== "Golf");
+  const addSpeed = () => { const v = Number(speedDraft); if (!speedDraft || isNaN(v)) return; setStore((st) => ({ ...st, logs: [...st.logs, { date: todayIso, kind: "speed", value: v }] })); setSpeedDraft(""); };
+  const moreTitles: Record<string, string> = { plan: "Weekly plan", phases: "12 weeks", log: "Log + backup", assess: "Tests", food: "Food", drills: "Drills + how-to", settings: "Settings", today: "Full day view" };
 
-      {tab === "today" && (
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+      <main style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px calc(env(safe-area-inset-bottom) + 96px)", display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14 }}>
+      {nav === "home" && (
         <Fragment>
-          <Section heading={`Right now · ${todayKey} ${fmtHour(hourNow)}`}>
+          <Hero photo={PHOTO.home} height={560} position="center 62%">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.9 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
+                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, lineHeight: "36px", textShadow: "0 1px 8px rgba(0,0,0,0.25)" }}>{`Hi, ${ui.name || "Golfer"}`}</div>
+                <div style={{ fontSize: 16, opacity: 0.95 }}>Let's check your activity</div>
+              </div>
+              <button onClick={() => go("settings")} aria-label="Settings" style={{ width: 54, height: 54, borderRadius: 27, border: "3px solid rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.25)", padding: 0, overflow: "hidden", cursor: "pointer" }}><img src="./icons/icon-192.png" alt="" width={48} height={48} style={{ width: "100%", height: "100%", display: "block" }} /></button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 18 }}>
+              <StatCard big emoji="✅" label="Today" value={`${dayPct}%`} detail={`${doneCount} of ${items.length} tasks done`} onClick={() => go(upNext ? catOf(upNext.key) : "daily")} />
+              <StatCard emoji="🔥" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
+              <StatCard emoji="⏱️" label="Time spent" value={`${minutesDone}`} unit={`of ${minutesPlanned} min`} />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit={`mph · goal 110 (${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} to go)`} onClick={() => go("golf")} />
+              <div style={{ marginTop: 8 }}><Bar value={(lastSpeed - 90) / 20} color="#ffffff" track="rgba(255,255,255,0.35)" /></div>
+            </div>
+          </Hero>
+          {upNext ? (
+            <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, border: "none", borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)", marginTop: -40, position: "relative", zIndex: 2 }}>
+              <span aria-hidden style={{ fontSize: 28 }}>🎯</span>
+              <span style={{ flex: 1 }}>
+                <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: 0.6 }}>{`Up next${upNext.b ? ` · ${fmtHour(upNext.b.s)}` : ""}`}</span>
+                <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{upNext.label}</span>
+              </span>
+              <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
+            </button>
+          ) : (
+            <div style={{ padding: 16, borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", marginTop: -40, position: "relative", zIndex: 2, fontWeight: 700 }}>🎉 Everything done today. Nice work.</div>
+          )}
+          <SectionTitle>Today by category</SectionTitle>
+          <div className="hscroll" style={{ margin: "0 -14px", padding: "2px 14px 8px" }}>
+            <CategoryCard title="Daily" emoji="☀️" color="#2f9e5c" lines={[`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} tasks`, "Mobility, hips, sleep, food"]} value={fracOf(dailyItems)} onClick={() => go("daily")} />
+            <CategoryCard title="Workout" emoji="🏋️" color="#f2a93b" photo={PHOTO.bunker} lines={[workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"}` : "Rest from training", todayWorkouts.filter((w) => !w.optional).map((w) => w.title).join(" · ") || "Mobility only"]} value={workItems.length ? fracOf(workItems) : 1} onClick={() => go("workout")} />
+            <CategoryCard title="Golf" emoji="⛳" color="#2f7fd8" photo={PHOTO.range} lines={[golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} ${golfItems.length === 1 ? "session" : "sessions"}` : "No golf today", plan.focus]} value={golfItems.length ? fracOf(golfItems) : 1} onClick={() => go("golf")} />
+          </div>
+          <Section heading={`Right now · ${todayKey} ${fmtHour(hourNow)}`} collapsible defaultOpen={false}>
             <Properties items={[
               { label: "Now", value: currentBlock ? `${fmtRange(currentBlock.s, currentBlock.e)}: ${currentBlock.t}` : hourNow < 6 ? "Sleep. Up at 6:00." : "Sleep. Lights out." },
               { label: "Next", value: nextBlock ? `${fmtHour(nextBlock.s)}: ${nextBlock.t}` : "Tomorrow, 6:00 wake" },
@@ -1026,22 +1127,180 @@ export default function App() {
           {isTestingDay && (
             <Section heading="Testing Day today">
               <Text>Only the 5-min warm-up this morning, then the tests at 6:30. Mobility score at 9:00 AM (Pliability or GOWOD), then the hip mini-block at 9:15. No TheStack training session today.</Text>
-              <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => setTab("assess")} />
+              <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => go("assess")} />
             </Section>
           )}
 
-          <Section heading={`Today's checklist · ${doneCount} of ${items.length}`}>
-            <ProgressBar value={doneCount / items.length} label={firstOpen ? `Next small win: ${firstOpen.label}` : "Everything done today. Nice work."} />
-            <TapList items={items} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} />
+          <Section heading="Streaks">
+            <Metrics metrics={[
+              { value: `${dayStreak}`, label: "Day streak", detail: "Days with 70% or more done" },
+              { value: `${mobStreak}`, label: "Mobility streak", detail: "Days in a row" },
+              { value: `${bedStreak}`, label: "Bed by 10 streak", detail: "Nights in a row" },
+              { value: `${drillStreak}`, label: "Drill streak", detail: "Drill days with at least one drill ticked" },
+            ]} />
+            {checkInDays > 0 && <Text>{`${checkInDays} check-in days logged so far. A missed day resets a streak, not your progress.`}</Text>}
           </Section>
 
-          {todayDrills.length > 0 && (
-            <Section heading={`Today's drills · ${todayDrillsDone} of ${todayDrills.length}`}>
-              <ProgressBar value={todayDrillsDone / todayDrills.length} label="Tap a drill when you hit its finish line" />
-              <DrillList drills={todayDrills} done={drillDone} onTap={toggleDrill} showDays={false} />
+          {weekHasData && <Section heading="This week, % of checklist done"><Columns points={weekPoints} emphasis={mondayOffset} /></Section>}
+          {heatHasData && <Section heading="Last 6 weeks"><CalendarHeatmap days={heatDays} max={100} note="Share of each day's checklist done" /></Section>}
+
+          <Section heading={`Today's timeline (${todayKey})`} caption="Suggested times; shift any block to fit your day." collapsible defaultOpen={false}>
+            <DayView start={6} end={23} events={routineEvents} mark={hourNow >= 6 && hourNow <= 23 ? { at: hourNow, label: "Now" } : undefined} />
+          </Section>
+
+          <Section heading="Safety note">
+            <Callout tone="info">This is general fitness guidance, not medical advice. Check with a doctor or physio before ramping up intensity, especially after a long lifting layoff. Pain (not effort) means stop and get it checked.</Callout>
+            <Text>{saved ? "Your check-ins are saved on this phone only. Export a backup now and then (Log tab)." : "This browser is not allowing storage here, so check-ins last only while the app stays open."}</Text>
+          </Section>
+        </Fragment>
+      )}
+
+      {nav === "daily" && (
+        <Fragment>
+          <div style={{ margin: "0 -14px", padding: "calc(env(safe-area-inset-top) + 16px) 18px 22px", borderRadius: "0 0 28px 28px", background: "linear-gradient(150deg, #2f9e5c 0%, #5cc98a 55%, #f2c94c 130%)", color: "#fff" }}>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>Daily</div>
+            <div style={{ fontSize: 14, opacity: 0.95 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done · mobility, hips, sleep, food`}</div>
+            <div style={{ marginTop: 12 }}><Bar value={fracOf(dailyItems)} color="#ffffff" track="rgba(255,255,255,0.35)" /></div>
+          </div>
+          {isTestingDay && (
+            <Section heading="Testing Day today">
+              <Text>Only the 5-min warm-up this morning, then the tests at 6:30. Mobility score at 9:00 AM (Pliability or GOWOD), then the hip mini-block at 9:15. No TheStack training session today.</Text>
+              <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => go("assess")} />
             </Section>
           )}
 
+          <Section heading="Daily habits">
+            <TapList items={dailyItems} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} />
+          </Section>
+          <div id="timer" style={{ scrollMarginTop: 12 }} />
+
+          <Section heading="Pick a routine">
+            <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily 18 min (lift day)" : "Daily 20 min" }, { value: "warmup", label: "Warm-up 5 min" }, { value: "sunday", label: "Sunday 26 min" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
+            <Text>{`${ROUTINES[effRoutine].when}. Total ${mmss(routineSecs(effRoutine))}. Press Start; the timer moves through each move by itself, shows which side to do, and buzzes (Android) at each change.`}</Text>
+          </Section>
+          {(effRoutine === "daily" || effRoutine === "dailylift") && (
+            <Section heading="Daily rules">
+              <BulletList items={[
+                "Tue and Thu: skip the block 3 throws (the strength primer has throws).",
+                "TheStack days (Mon, Wed, Sat): this routine plus the 4-min hip mini-block is your warm-up; TheStack starts at 6:34.",
+                "Right after this routine: the 4-min daily hip mini-block (Today checklist / Drills > Hips).",
+                "Sore today: drop the kettlebell single-leg RDL.",
+              ]} />
+            </Section>
+          )}
+          <Section heading={`${ROUTINES[effRoutine].label} · ${stretchDoneN} of ${ROUTINES[effRoutine].moves.length} done`}>
+            <StretchPlayer key={effRoutine} moves={ROUTINES[effRoutine].moves} done={stretchDone} onSet={(id, v) => setStretch(effRoutine, id, v)} />
+          </Section>
+          {limited.length > 0 && <Section heading="Extra focus from your last test"><Table columns={["Limited screen", "Give these extra time"]} rows={limited.map((s) => [s.name, s.fix])} align={["start", "start"]} /></Section>}
+          <Section heading="Mobility routines (print version)" collapsible defaultOpen={false}>
+            <Section heading={`Daily mobility + strength · ${fmtRange(ROUTINES.daily.start, ROUTINES.daily.start + routineSecs("daily") / 3600)}`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("daily", ROUTINES.daily.start)} /></Section>
+            <Section heading={`Daily hip mini-block · 6:30-6:34 AM (6:28 Tue/Thu)`}><Table columns={["Time", "Exercise", "Sets x reps, rest", "Load"]} rows={sessionRows(at(HIP_MINI, T(6, 30)))} /></Section>
+            <Section heading={`5-min dynamic warm-up · ${fmtRange(ROUTINES.warmup.start, ROUTINES.warmup.start + routineSecs("warmup") / 3600)} before rounds`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("warmup", ROUTINES.warmup.start)} /></Section>
+            <Section heading={`Sunday long stretch · ${fmtRange(ROUTINES.sunday.start, ROUTINES.sunday.start + routineSecs("sunday") / 3600)}`}><Table columns={["Time", "Stretch", "Rounds x hold", "Cue"]} rows={stretchRows("sunday", ROUTINES.sunday.start)} /></Section>
+            <Text>Block 1 opens the range, block 2 builds strength in it, block 3 uses it at speed. Holds are seconds per side unless marked; back off if anything pinches.</Text>
+          </Section>
+                  <Section heading="Energy, focus, notes">
+            <Rating label="Energy (1 low, 5 high)" value={rec.energy} onPick={(n) => updateToday({ energy: n })} />
+            <Rating label="Focus (1 low, 5 high)" value={rec.focus} onPick={(n) => updateToday({ focus: n })} />
+            <Input label="One line about today" value={rec.notes || ""} placeholder="Sore back, great wedges, slept badly..." onChange={(v) => updateToday({ notes: v })} />
+          </Section>
+
+          {todayKey === "Sun" && (
+            <Section heading="Weekly review (5 min)">
+              <Input label="1. What went well this week?" value={rec.win || ""} onChange={(v) => updateToday({ win: v })} />
+              <Input label="2. What got in the way?" value={rec.fix || ""} onChange={(v) => updateToday({ fix: v })} />
+              <Input label="3. One thing to change next week" value={rec.next || ""} onChange={(v) => updateToday({ next: v })} />
+              <Text>Then book next week's tee times: Monday 18 holes at about 1:15 PM and Friday 9 holes at about 3:15 PM (back to 18 on Fridays from about mid-March). Prep food for Monday and Tuesday. Good moment to export a backup (Log tab).</Text>
+            </Section>
+          )}
+
+          <MenuRow emoji="🥗" title="Food + water guide" sub="Protein, water, meal timing" onClick={() => go("food")} />
+          {!store.startDate && <Button label="Start week 1 today" onClick={() => setStore((st) => ({ ...st, startDate: todayIso }))} />}
+        </Fragment>
+      )}
+
+      {nav === "workout" && !curW && (
+        <Fragment>
+          <Hero photo={PHOTO.bunker} height={230} position="50% 40%" fade={false}>
+            <div style={{ marginTop: "auto" }}>
+              <div style={{ fontSize: 30, fontWeight: 800, textShadow: "0 1px 8px rgba(0,0,0,0.3)" }}>Workouts</div>
+              <div style={{ fontSize: 14 }}>{workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"} done today` : "No main session today: mobility and hips only"}</div>
+            </div>
+          </Hero>
+          {workItems.length > 0 && <Section heading="Today's sessions"><TapList items={workItems} onTap={toggle} /></Section>}
+          <SectionTitle>Today</SectionTitle>
+          {todayWorkouts.map((w) => { const n = w.s.items.length; const d = wDoneN(w); return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : "Today"} lines={[`${n} exercises`, `${Math.round(sessMin(w.s as any))} minutes · ${w.when}`]} value={d / n} progressLabel={`${d}/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
+          <SectionTitle>All workouts</SectionTitle>
+          {otherWorkouts.map((w) => { const n = w.s.items.length; return <WorkoutCard key={w.id} title={w.title} lines={[`${n} exercises`, `${Math.round(sessMin(w.s as any))} minutes · ${w.when}`]} value={0} progressLabel={w.sub} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
+          {workDrillsToday.length > 0 && (
+            <Section heading={`Today's power + hip drills · ${workDrillsToday.filter((d) => drillDone[d.id]).length} of ${workDrillsToday.length}`} caption="Same drills as inside the sessions, with cues and finish lines." collapsible defaultOpen={false}>
+              <DrillList drills={workDrillsToday} done={drillDone} onTap={toggleDrill} showDays={false} />
+            </Section>
+          )}
+          <MenuRow emoji="📚" title="All drills + how-to demos" sub="Power, hips, golf, scores" onClick={() => go("drills")} />
+        </Fragment>
+      )}
+
+      {nav === "workout" && curW && (() => { const w = curW; const n = w.s.items.length; const d = wDoneN(w); const pi = player; const pe = pi !== null ? w.s.items[pi] : null; return (
+        <Fragment>
+          <Hero photo={pi !== null && demoThumb(demoFor(pe)) ? demoThumb(demoFor(pe)) : wThumb(w) || PHOTO.bunker} height={260} position="center" onBack={() => { if (player !== null) setPlayer(null); else setDetail(null); }} />
+          <div style={{ marginTop: -36, position: "relative", zIndex: 2, background: "var(--bg)", borderRadius: "28px 28px 0 0", padding: "10px 2px 0", display: "grid", gap: 12 }}>
+            <div style={{ width: 44, height: 5, borderRadius: 3, background: "var(--border-strong)", margin: "0 auto" }} />
+            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.3 }}>{w.title}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Chip icon={Icon.clock} label={`${Math.round(sessMin(w.s as any))} min`} />
+              <Chip icon={Icon.list} label={`${n} exercises`} />
+              <Chip label={w.when} tone="rgba(47,127,216,0.12)" />
+              {d > 0 && <Chip icon={Icon.check} label={`${d}/${n} done`} />}
+            </div>
+            {pi === null && <Text>{w.s.goal}</Text>}
+            {pi !== null && pe && (
+              <Section heading={`Exercise ${pi + 1} of ${n}: ${pe.name}`}>
+                <Properties items={[{ label: "Sets x reps", value: pe.dose }, { label: "Rest", value: pe.rest }, { label: "Load + cues", value: pe.load }]} />
+                {DEMOS[demoFor(pe)] && <DemoBlock key={`p${pi}`} id={demoFor(pe)} defaultOpen={true} />}
+                <Button variant="primary" label={pi < n - 1 ? "Done, next exercise" : "Done, finish workout"} onClick={() => { setRow(w, pi, true); if (pi < n - 1) setPlayer(pi + 1); else finishWorkout(w); }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button label="Back" onClick={() => setPlayer(Math.max(0, pi - 1))} />
+                  <Button label="Skip" onClick={() => (pi < n - 1 ? setPlayer(pi + 1) : setPlayer(null))} />
+                </div>
+              </Section>
+            )}
+            {w.s.items.map((e, i) => { const id = demoFor(e); return (
+              <Fragment key={i}>
+                <ExerciseRow title={e.name} sub={`${e.dose}${e.rest && e.rest !== "-" ? ` · rest ${e.rest}` : ""} · ${e.min} min`} done={wRowDone(w, i)} active={pi === i || openEx === i} thumb={demoThumb(id)} fallback={id && DEMOS[id] ? "▶️" : w.fallback} onTap={() => setRow(w, i, !wRowDone(w, i))} onOpen={() => setOpenEx(openEx === i ? null : i)} />
+                {openEx === i && pi === null && (
+                  <div style={{ display: "grid", gap: 8, padding: "2px 6px 8px" }}>
+                    <Text>{e.load}</Text>
+                    {id && DEMOS[id] ? <DemoBlock key={`o${i}`} id={id} defaultOpen={!!demoThumb(id)} /> : null}
+                  </div>
+                )}
+              </Fragment>
+            ); })}
+            {w.id === "strA" || w.id === "strB" ? <Callout tone="warning">Warm up first, stop 2 reps short of failure, flat back on every hinge, no pain.</Callout> : null}
+            {w.id.startsWith("hip") || w.id === "primer" ? <Callout tone="warning">{HIP_SAFETY}</Callout> : null}
+            <div style={{ height: 70 }} />
+          </div>
+          {pi === null && (
+            <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(env(safe-area-inset-bottom) + 70px)", zIndex: 40, padding: "0 16px" }}>
+              <button onClick={() => { const f = w.s.items.findIndex((_e, i) => !wRowDone(w, i)); setPlayer(f < 0 ? 0 : f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ display: "block", width: "100%", maxWidth: 728, margin: "0 auto", minHeight: 58, borderRadius: 29, border: "none", background: "var(--primary)", color: "#fff", fontSize: 18, fontWeight: 800, boxShadow: "0 10px 24px rgba(47,158,92,0.35)", cursor: "pointer" }}>{d === 0 ? "Start" : d < n ? "Continue" : "Start again"}</button>
+            </div>
+          )}
+        </Fragment>
+      ); })()}
+
+      {nav === "golf" && (
+        <Fragment>
+          <Hero photo={PHOTO.range} height={240} position="40% 40%" fade={false}>
+            <div style={{ marginTop: "auto" }}>
+              <div style={{ fontSize: 30, fontWeight: 800, textShadow: "0 1px 8px rgba(0,0,0,0.3)" }}>Golf</div>
+              <div style={{ fontSize: 14 }}>{golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} golf sessions done today` : "No golf session today"}</div>
+            </div>
+          </Hero>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit="mph" detail={`Best ${bestSpeed || lastSpeed} · goal 110`} />
+            <StatCard emoji="🎯" label="Wedge hits" value={wedgeHist.length ? `${wPct(wedgeHist[wedgeHist.length - 1])}%` : "-"} detail={wedgeHist.length ? `Last: Ladder ${wedgeHist[wedgeHist.length - 1].ladder}` : `Next: Ladder ${nextLadder}`} />
+          </div>
+          {golfItems.length > 0 && <Section heading="Today's golf"><TapList items={golfItems} onTap={toggle} /></Section>}
           {plan.checks.indexOf("wedges") >= 0 && (
             <Section heading={`Wedge ladder ${wedgeRec.ladder} · 30 min`} caption={`Alternates A/B each session (last: ${wedgePrev ? `${wedgePrev.ladder} on ${shortDate(wedgePrev.date)}` : "none yet, so A first"}). 5 min warm-up, then 30 shots. Hit = carry within 10% of the target.`}>
               <WedgeCounter rec={wedgeRec} canSwitch={true} onShot={wedgeShot} onUndo={wedgeUndo} onSwitch={wedgeSwitch} onFinish={wedgeFinish} />
@@ -1071,46 +1330,76 @@ export default function App() {
             </Section>
           )}
 
-          <Section heading="Energy, focus, notes">
-            <Rating label="Energy (1 low, 5 high)" value={rec.energy} onPick={(n) => updateToday({ energy: n })} />
-            <Rating label="Focus (1 low, 5 high)" value={rec.focus} onPick={(n) => updateToday({ focus: n })} />
-            <Input label="One line about today" value={rec.notes || ""} placeholder="Sore back, great wedges, slept badly..." onChange={(v) => updateToday({ notes: v })} />
-          </Section>
-
-          {todayKey === "Sun" && (
-            <Section heading="Weekly review (5 min)">
-              <Input label="1. What went well this week?" value={rec.win || ""} onChange={(v) => updateToday({ win: v })} />
-              <Input label="2. What got in the way?" value={rec.fix || ""} onChange={(v) => updateToday({ fix: v })} />
-              <Input label="3. One thing to change next week" value={rec.next || ""} onChange={(v) => updateToday({ next: v })} />
-              <Text>Then book next week's tee times: Monday 18 holes at about 1:15 PM and Friday 9 holes at about 3:15 PM (back to 18 on Fridays from about mid-March). Prep food for Monday and Tuesday. Good moment to export a backup (Log tab).</Text>
+          {golfDrillsToday.length > 0 && (
+            <Section heading={`Today's golf drills · ${golfDrillsToday.filter((d) => drillDone[d.id]).length} of ${golfDrillsToday.length}`}>
+              <DrillList drills={golfDrillsToday} done={drillDone} onTap={toggleDrill} showDays={false} />
             </Section>
           )}
+          <Section heading="Log swing speed" caption="TheStack or Rapsodo max club speed (mph)">
+            <Input label="Club speed (mph)" type="number" value={speedDraft} placeholder={`${lastSpeed}`} onChange={(v) => setSpeedDraft(v)} />
+            <Button variant="primary" label="Save speed" onClick={addSpeed} />
+            {speedLogs.length >= 2 && <LineChart points={lineFrom(speedLogs)} floor={Math.min(90, ...speedLogs.map((l) => l.value))} ceiling={Math.max(112, ...speedLogs.map((l) => l.value))} unit="mph" labels={["Club speed"]} secondary={{ label: "Goal 110", values: speedLogs.map(() => 110) }} format={(v) => `${v} mph`} />}
+          </Section>
+          <Section heading="Weekly golf" collapsible defaultOpen={false}>
+            <Rows rows={ALL7.map((k) => { const pk = planFor(todayIso, k); const g = pk.checks.filter((c) => GOLF_KEYS.indexOf(c) >= 0); return { lead: k, title: g.length ? g.map((c) => labelFor(pk, c)).join(" · ") : "No golf", detail: pk.focus }; })} />
+          </Section>
+          <MenuRow emoji="📈" title="Full log" sub="Speed, scores, wedge sessions, backup" onClick={() => go("log")} />
+          <MenuRow emoji="📚" title="Golf drills + how-to" sub="Wedges, putting, sim" onClick={() => go("drills")} />
+        </Fragment>
+      )}
 
-          <Section heading="Streaks">
-            <Metrics metrics={[
-              { value: `${dayStreak}`, label: "Day streak", detail: "Days with 70% or more done" },
-              { value: `${mobStreak}`, label: "Mobility streak", detail: "Days in a row" },
-              { value: `${bedStreak}`, label: "Bed by 10 streak", detail: "Nights in a row" },
-              { value: `${drillStreak}`, label: "Drill streak", detail: "Drill days with at least one drill ticked" },
+      {nav === "more" && tab === "menu" && (
+        <Fragment>
+          <ScreenTitle title="More" sub="Plan, history, tests and settings" />
+          <MenuRow emoji="🗓️" title="Weekly plan" sub="Every day, minute by minute" onClick={() => setTab("plan")} />
+          <MenuRow emoji="📈" title="12 weeks" sub="Phases + progression rules" onClick={() => setTab("phases")} />
+          <MenuRow emoji="📝" title="Log + backup" sub="Speed, lifts, scores, wedges, export/import, credits" onClick={() => setTab("log")} />
+          <MenuRow emoji="📏" title="Tests" sub="Testing Days + mobility screens" onClick={() => setTab("assess")} />
+          <MenuRow emoji="🥗" title="Food" sub="Protein, water, meal timing" onClick={() => setTab("food")} />
+          <MenuRow emoji="📚" title="Drills + how-to" sub="All drills, demos, scores" onClick={() => setTab("drills")} />
+          <MenuRow emoji="🕒" title="Full day view" sub="Right now, timeline, full checklist" onClick={() => setTab("today")} />
+          <MenuRow emoji="⚙️" title="Settings" sub="Your name, dark mode" onClick={() => setTab("settings")} />
+          <MenuRow emoji="©️" title="Credits + licenses" sub="Demo images and videos" onClick={() => setTab("log")} />
+        </Fragment>
+      )}
+      {nav === "more" && tab !== "menu" && <ScreenTitle title={moreTitles[tab] || "More"} onBack={() => setTab("menu")} />}
+      {nav === "more" && tab === "settings" && (
+        <Fragment>
+          <Section heading="Your name">
+            <Input label="Shown on Home as 'Hi, ...'" value={ui.name || ""} placeholder="Golfer" onChange={(v) => setUi({ ...ui, name: v })} />
+          </Section>
+          <Section heading="Appearance">
+            <Segmented<string> options={[{ value: "light", label: "☀️ Light" }, { value: "dark", label: "🌙 Dark" }]} value={ui.dark ? "dark" : "light"} onChange={(v) => setUi({ ...ui, dark: v === "dark" })} />
+          </Section>
+          <Section heading="About">
+            <Text>Your plan data stays on this phone (Log + backup to export). Name and theme are stored separately and never touch your check-ins.</Text>
+          </Section>
+        </Fragment>
+      )}
+      {nav === "more" && tab === "today" && (
+        <Fragment>
+          <Section heading={`Right now · ${todayKey} ${fmtHour(hourNow)}`}>
+            <Properties items={[
+              { label: "Now", value: currentBlock ? `${fmtRange(currentBlock.s, currentBlock.e)}: ${currentBlock.t}` : hourNow < 6 ? "Sleep. Up at 6:00." : "Sleep. Lights out." },
+              { label: "Next", value: nextBlock ? `${fmtHour(nextBlock.s)}: ${nextBlock.t}` : "Tomorrow, 6:00 wake" },
+              { label: "Today's focus", value: plan.focus },
+              { label: "Program week", value: programWeek > 0 ? `Week ${programWeek} of 12 · ${phaseName}` : "Not started" },
+              { label: "Next Testing Day", value: nextTest ? (nextTest === todayIso ? "Today" : `${shortDate(nextTest)} (Wednesday)`) : "Set new dates after Feb 10" },
+              { label: "Reminders", value: "Chat reminders: about 6:00 AM (morning plan) and about 9:30 PM (evening check-in)" },
             ]} />
-            {checkInDays > 0 && <Text>{`${checkInDays} check-in days logged so far. A missed day resets a streak, not your progress.`}</Text>}
+            {currentBlock && currentBlock.routine && <Button variant="primary" label={`Start guided ${ROUTINES[currentBlock.routine].label.toLowerCase()}`} onClick={() => openStretch(currentBlock.routine)} />}
+            {currentBlock && !currentBlock.routine && currentBlock.k && !rec.c[currentBlock.k] && <Button variant="primary" label={`Done: ${labelFor(plan, currentBlock.k)}`} onClick={() => toggle(currentBlock.k as CheckKey)} />}
+            {!store.startDate && <Button label="Start week 1 today" onClick={() => setStore((s) => ({ ...s, startDate: todayIso }))} />}
           </Section>
 
-          {weekHasData && <Section heading="This week, % of checklist done"><Columns points={weekPoints} emphasis={mondayOffset} /></Section>}
-          {heatHasData && <Section heading="Last 6 weeks"><CalendarHeatmap days={heatDays} max={100} note="Share of each day's checklist done" /></Section>}
-
-          <Section heading={`Today's timeline (${todayKey})`} caption="Suggested times; shift any block to fit your day." collapsible defaultOpen={false}>
-            <DayView start={6} end={23} events={routineEvents} mark={hourNow >= 6 && hourNow <= 23 ? { at: hourNow, label: "Now" } : undefined} />
-          </Section>
-
-          <Section heading="Safety note">
-            <Callout tone="info">This is general fitness guidance, not medical advice. Check with a doctor or physio before ramping up intensity, especially after a long lifting layoff. Pain (not effort) means stop and get it checked.</Callout>
-            <Text>{saved ? "Your check-ins are saved on this phone only. Export a backup now and then (Log tab)." : "This browser is not allowing storage here, so check-ins last only while the app stays open."}</Text>
+          <Section heading={`Full checklist · ${doneCount} of ${items.length}`}>
+            <ProgressBar value={doneCount / items.length} label={firstOpen ? `Next small win: ${firstOpen.label}` : "Everything done today. Nice work."} />
+            <TapList items={items} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} />
           </Section>
         </Fragment>
       )}
 
-      {tab === "drills" && (
+      {nav === "more" && tab === "drills" && (
         <Fragment>
           <Section heading="Show">
             <Segmented<string>
@@ -1159,9 +1448,9 @@ export default function App() {
               {HOWTO_GROUPS.map((g) => (
                 <Section key={g.title} heading={g.title} collapsible defaultOpen={g.open}>
                   {g.items.map((it) => (
-                    <div key={g.title + it.id} style={{ display: "grid", gap: 6, paddingBottom: 10, borderBottom: "1px solid #24402f" }}>
+                    <div key={g.title + it.id} style={{ display: "grid", gap: 6, paddingBottom: 10, borderBottom: "1px solid var(--border)" }}>
                       <div style={{ fontWeight: 600, fontSize: 15 }}>{it.name}</div>
-                      {DEMOS[it.id] ? <DemoBlock id={it.id} /> : <div style={{ fontSize: 13, color: "#7c9886" }}>{it.why || "No demo needed"}</div>}
+                      {DEMOS[it.id] ? <DemoBlock id={it.id} /> : <div style={{ fontSize: 13, color: "var(--text3)" }}>{it.why || "No demo needed"}</div>}
                     </div>
                   ))}
                 </Section>
@@ -1174,37 +1463,7 @@ export default function App() {
         </Fragment>
       )}
 
-      {tab === "stretch" && (
-        <Fragment>
-          <Section heading="Pick a routine">
-            <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily 18 min (lift day)" : "Daily 20 min" }, { value: "warmup", label: "Warm-up 5 min" }, { value: "sunday", label: "Sunday 26 min" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
-            <Text>{`${ROUTINES[effRoutine].when}. Total ${mmss(routineSecs(effRoutine))}. Press Start; the timer moves through each move by itself, shows which side to do, and buzzes (Android) at each change.`}</Text>
-          </Section>
-          {(effRoutine === "daily" || effRoutine === "dailylift") && (
-            <Section heading="Daily rules">
-              <BulletList items={[
-                "Tue and Thu: skip the block 3 throws (the strength primer has throws).",
-                "TheStack days (Mon, Wed, Sat): this routine plus the 4-min hip mini-block is your warm-up; TheStack starts at 6:34.",
-                "Right after this routine: the 4-min daily hip mini-block (Today checklist / Drills > Hips).",
-                "Sore today: drop the kettlebell single-leg RDL.",
-              ]} />
-            </Section>
-          )}
-          <Section heading={`${ROUTINES[effRoutine].label} · ${stretchDoneN} of ${ROUTINES[effRoutine].moves.length} done`}>
-            <StretchPlayer key={effRoutine} moves={ROUTINES[effRoutine].moves} done={stretchDone} onSet={(id, v) => setStretch(effRoutine, id, v)} />
-          </Section>
-          {limited.length > 0 && <Section heading="Extra focus from your last test"><Table columns={["Limited screen", "Give these extra time"]} rows={limited.map((s) => [s.name, s.fix])} align={["start", "start"]} /></Section>}
-          <Section heading="Mobility routines (print version)" collapsible defaultOpen={false}>
-            <Section heading={`Daily mobility + strength · ${fmtRange(ROUTINES.daily.start, ROUTINES.daily.start + routineSecs("daily") / 3600)}`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("daily", ROUTINES.daily.start)} /></Section>
-            <Section heading={`Daily hip mini-block · 6:30-6:34 AM (6:28 Tue/Thu)`}><Table columns={["Time", "Exercise", "Sets x reps, rest", "Load"]} rows={sessionRows(at(HIP_MINI, T(6, 30)))} /></Section>
-            <Section heading={`5-min dynamic warm-up · ${fmtRange(ROUTINES.warmup.start, ROUTINES.warmup.start + routineSecs("warmup") / 3600)} before rounds`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("warmup", ROUTINES.warmup.start)} /></Section>
-            <Section heading={`Sunday long stretch · ${fmtRange(ROUTINES.sunday.start, ROUTINES.sunday.start + routineSecs("sunday") / 3600)}`}><Table columns={["Time", "Stretch", "Rounds x hold", "Cue"]} rows={stretchRows("sunday", ROUTINES.sunday.start)} /></Section>
-            <Text>Block 1 opens the range, block 2 builds strength in it, block 3 uses it at speed. Holds are seconds per side unless marked; back off if anything pinches.</Text>
-          </Section>
-        </Fragment>
-      )}
-
-      {tab === "plan" && (
+      {nav === "more" && tab === "plan" && (
         <Fragment>
           <Section heading="The week at a glance">
             <Table columns={["Day", "Morning", "Evening"]} rows={DAY_ORDER.map((k) => [k, PLAN[k].am, PLAN[k].pm])} emphasis={DAY_ORDER.indexOf(todayKey)} />
@@ -1227,7 +1486,7 @@ export default function App() {
         </Fragment>
       )}
 
-      {tab === "phases" && (
+      {nav === "more" && tab === "phases" && (
         <Fragment>
           <Section heading="Three 4-week phases">
             <Table columns={["Phase", "Lifting + power", "Speed work", "Speed goal"]} rows={[
@@ -1255,7 +1514,7 @@ export default function App() {
         </Fragment>
       )}
 
-      {tab === "log" && (
+      {nav === "more" && tab === "log" && (
         <Fragment>
           <Section heading="Add an entry">
             <Select<LogKind> label="What" options={LOG_KINDS.map((k) => ({ value: k.value, label: k.label }))} value={logKind} onChange={(v) => setLogKind(v)} />
@@ -1298,7 +1557,7 @@ export default function App() {
         </Fragment>
       )}
 
-      {tab === "assess" && (
+      {nav === "more" && tab === "assess" && (
         <Fragment>
           <Section heading="Testing Day · every 4 weeks">
             <Properties items={[
@@ -1364,7 +1623,7 @@ export default function App() {
         </Fragment>
       )}
 
-      {tab === "food" && (
+      {nav === "more" && tab === "food" && (
         <Fragment>
           <Section heading="Protein"><BulletList items={["Aim for about 0.7-1.0 g of protein per lb of bodyweight per day, a common range for people strength training.", "Easiest way: a palm-to-hand-sized portion at every meal, plus one protein snack.", "Easy options: eggs, Greek yogurt, chicken, fish, lean beef, cottage cheese, a protein shake."]} /></Section>
           <Section heading="Water"><BulletList items={["Start the day with a full glass of water before coffee.", "Refill one bottle each morning, mid-work, and after work.", "Add a bottle on training days and during rounds; pale yellow urine is a simple check."]} /></Section>
@@ -1380,6 +1639,8 @@ export default function App() {
           <Section heading="Simple rules, not a diet"><BulletList items={["Plate: half vegetables or fruit, a quarter protein, a quarter carbs.", "Keep caffeine to the morning and early afternoon so it does not fight bedtime.", "Keep alcohol light, especially the night before training or a round.", "Sunday meal prep makes Monday and Tuesday automatic.", "One off-plan meal is not a failure; the next meal is the reset."]} /></Section>
         </Fragment>
       )}
-    </Page>
+      </main>
+      <BottomNav value={nav} onChange={(v) => { setDetail(null); setPlayer(null); if (v === "more" && nav === "more") setTab("menu"); setNav(v); }} />
+    </div>
   );
 }
