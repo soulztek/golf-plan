@@ -3,6 +3,8 @@ import {
   Page, Section, Text, Callout, BulletList, Steps, Table, Rows, Properties, Segmented, Select, Input, Button,
   LineChart, Columns, CalendarHeatmap, DayView, Metrics, LinkCards, Fragment, useState, useEffect, useMemo, useGrokTheme,
 } from "./kit";
+import { DemoBlock, demoKind } from "./Demo";
+import { DEMOS, FEDB_USED } from "./demos.generated";
 
 type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 type CheckKey = "wake" | "mobility" | "strength" | "speed" | "wedges" | "putting" | "sim" | "eighteen" | "nine" | "hips" | "hipmini" | "recovery" | "review" | "protein" | "water" | "screens" | "bed";
@@ -653,7 +655,8 @@ function DrillList(props: { drills: Drill[]; done: Record<string, boolean>; onTa
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {props.drills.map((d) => { const on = !!props.done[d.id]; return (
-        <button key={d.id} onClick={() => props.onTap(d.id)} style={{ width: "100%", display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 16px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.accentSubtle : t.bg.elevated, color: t.text.primary, fontFamily: t.font.family }}>
+        <div key={d.id} style={{ display: "grid", gap: 8, padding: 0, borderRadius: t.radius.lg, border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.accentSubtle : t.bg.elevated }}>
+        <button onClick={() => props.onTap(d.id)} style={{ width: "100%", display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 16px 6px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: "none", background: "transparent", color: t.text.primary, fontFamily: t.font.family }}>
           <span style={{ flex: "0 0 auto", width: 28, height: 28, marginTop: 2, borderRadius: t.radius.md, border: `2px solid ${on ? t.fill.controlChecked : t.border.strong}`, background: on ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: t.weight.semibold }}>{on ? "✓" : ""}</span>
           <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
             <span style={{ fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight, fontWeight: t.weight.semibold, textDecoration: on ? "line-through" : "none", color: on ? t.text.secondary : t.text.primary }}>{d.name}</span>
@@ -663,6 +666,8 @@ function DrillList(props: { drills: Drill[]; done: Record<string, boolean>; onTa
             <span style={{ fontSize: t.font.label.fontSize, color: t.text.tertiary }}>{`${props.showDays && d.days.length > 0 ? `${d.days.length === 7 ? "Daily" : d.days.join(", ")} · ` : ""}${d.when}${d.credit ? ` · ${d.credit}` : ""}`}</span>
           </span>
         </button>
+        {DEMOS[d.id] && <div style={{ padding: "0 12px 12px 54px" }}><DemoBlock id={d.id} /></div>}
+        </div>
       ); })}
     </div>
   );
@@ -709,6 +714,7 @@ function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; on
         <div style={{ fontSize: t.font.heading2.fontSize, lineHeight: t.font.heading2.lineHeight, fontWeight: t.weight.semibold }}>{m.name}</div>
         <div style={{ fontSize: t.font.body1.fontSize }}>{doseOf(m)}</div>
         <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{m.cue}</div>
+        {DEMOS[m.id] && <DemoBlock key={m.id} id={m.id} />}
         <div style={{ fontSize: 56, lineHeight: "64px", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: t.text.link }}>{mmss(left)}</div>
         <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{phase}</div>
         <div style={{ height: 8, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}><div style={{ width: `${m.secs > 0 ? (elapsed / m.secs) * 100 : 0}%`, height: "100%", background: t.dataviz.categorical[0] }} /></div>
@@ -770,6 +776,25 @@ function BackupBox(props: { store: Store; onImport: (s: Store) => void }) {
     </div>
   );
 }
+
+const LIFTS: { id: string; name: string; why?: string }[] = [
+  { id: "trapdl", name: "Trap bar deadlift (Tue)" },
+  { id: "bench", name: "Bench press (Tue, Thu)" },
+  { id: "row", name: "Barbell bent-over row (Thu)" },
+  { id: "broad", name: "Broad jump (Testing Day)" },
+  { id: "thestack", name: "TheStack speed session (Mon, Wed, Sat)" },
+];
+const uniqMoves = (ms: Move[]) => ms.map((m) => ({ id: m.id, name: m.name }));
+const HOWTO_GROUPS: { title: string; open: boolean; items: { id: string; name: string; why?: string }[] }[] = [
+  { title: "Daily mobility + strength", open: true, items: uniqMoves(DAILY_MOVES) },
+  { title: "Strength lifts + speed", open: false, items: LIFTS },
+  { title: "Power drills", open: false, items: DRILLS.filter((d) => d.group === "Power").map((d) => ({ id: d.id, name: d.name })) },
+  { title: "Hips", open: false, items: DRILLS.filter((d) => d.group === "Hips").map((d) => ({ id: d.id, name: d.name })) },
+  { title: "5-min warm-up", open: false, items: uniqMoves(WARMUP_MOVES) },
+  { title: "Sunday long stretch", open: false, items: uniqMoves(SUNDAY_MOVES) },
+  { title: "Golf + home practice", open: false, items: DRILLS.filter((d) => d.group === "Golf").map((d) => ({ id: d.id, name: d.name, why: d.id === "transfer" ? "Just 5 max drives on Rapsodo with a ball, shoes on" : d.id === "sim18" ? "Just play a sim round (front tees, no driver)" : d.id.startsWith("round") ? "Your real round, no demo needed" : undefined })) },
+];
+const CREDIT_CHANNELS: string[] = Array.from(new Set(Object.values(DEMOS).flatMap((d: any) => (d.videos || []).map((v: any) => v.channel)))).sort();
 
 export default function App() {
   const initial = useMemo(() => loadStore(), []);
@@ -1029,7 +1054,7 @@ export default function App() {
         <Fragment>
           <Section heading="Show">
             <Segmented<string>
-              options={[{ value: "Today", label: `Today (${todayDrills.length})` }, { value: "Power", label: "Power" }, { value: "Hips", label: "Hips" }, { value: "Golf", label: "Golf + home" }, { value: "Scores", label: "Scores" }, { value: "All", label: "All" }]}
+              options={[{ value: "Today", label: `Today (${todayDrills.length})` }, { value: "Power", label: "Power" }, { value: "Hips", label: "Hips" }, { value: "Golf", label: "Golf + home" }, { value: "HowTo", label: "How-to" }, { value: "Scores", label: "Scores" }, { value: "All", label: "All" }]}
               value={drillView} onChange={(v) => setDrillView(v)}
             />
             <Text>Tap a drill when you reach its "done when" line. Ticks save to today's check-in.</Text>
@@ -1065,6 +1090,23 @@ export default function App() {
               <Table columns={["Score", "How it's scored", "Last", "Best", "Sessions"]} rows={GAMES.map((g) => { const rs = gameRecs(g.id); const b = bestOf(g); return [g.name, g.scoring, rs.length > 0 ? `${rs[rs.length - 1].score}` : "-", b !== undefined ? `${b}` : "-", `${rs.length}`]; })} align={["start", "start", "end", "end", "end"]} />
               <Text>One score per session: wedges (random test), putting (make 10), sim (GIR and proximity), rounds (score, on the Log tab), TheStack (best speed).</Text>
             </Section>
+          )}
+          {drillView === "HowTo" && (
+            <Fragment>
+              <Section heading="How-to demos" caption="Every exercise in the plan. Tap a thumbnail for a looping demo, or Watch how for a short video. Drill cards on the other views have the same demos.">
+                <Text>Looping demos are bundled in the app and work offline. Videos open YouTube and need a connection.</Text>
+              </Section>
+              {HOWTO_GROUPS.map((g) => (
+                <Section key={g.title} heading={g.title} collapsible defaultOpen={g.open}>
+                  {g.items.map((it) => (
+                    <div key={g.title + it.id} style={{ display: "grid", gap: 6, paddingBottom: 10, borderBottom: "1px solid #24402f" }}>
+                      <div style={{ fontWeight: 600, fontSize: 15 }}>{it.name}</div>
+                      {DEMOS[it.id] ? <DemoBlock id={it.id} /> : <div style={{ fontSize: 13, color: "#7c9886" }}>{it.why || "No demo needed"}</div>}
+                    </div>
+                  ))}
+                </Section>
+              ))}
+            </Fragment>
           )}
           <Section heading="Drills by day" collapsible defaultOpen={false}>
             <Table columns={["Day", "Drills"]} rows={DAY_ORDER.map((k) => { const ds = DRILLS.filter((d) => d.days.indexOf(k) >= 0).map((d) => d.name); return [k, ds.length > 0 ? ds.join(", ") : "Rest day"]; })} emphasis={DAY_ORDER.indexOf(todayKey)} align={["start", "start"]} />
@@ -1180,6 +1222,11 @@ export default function App() {
           <Section heading="Backup" caption="Everything lives on this phone only. Export now and then; import to restore or move to a new phone.">
             <Callout tone="info">Moving from the old flypod.page link? Each web address keeps its own data. On the old link, tap Export first, then open the new link (soulztek.github.io/golf-plan) and Import that file. The old link stops working on Nov 5.</Callout>
             <BackupBox store={store} onImport={(s) => setStore(s)} />
+          </Section>
+          <Section heading="Credits + licenses" collapsible defaultOpen={false}>
+            <Text>{`Looping exercise demos: built from the start and end photos in free-exercise-db by yuhonas (github.com/yuhonas/free-exercise-db), released into the public domain under the Unlicense; data originally from wrkout/exercises.json (also Unlicense). Frames were resized and combined into animations for this app. Exercises used (${FEDB_USED.length}): ${FEDB_USED.join(", ")}.`}</Text>
+            <Text>{`"Watch how" buttons only link to videos on YouTube; nothing is copied or embedded, and each video belongs to its channel: ${CREDIT_CHANNELS.join(", ")}. The two hip videos (Garrett Kuljian; Dr. Caleb Burgess, DPT) are the ones you shared.`}</Text>
+            <Text>App icon and code made for this app. Demos show the general movement; follow the cues and loads in your plan, and stop if anything hurts.</Text>
           </Section>
         </Fragment>
       )}

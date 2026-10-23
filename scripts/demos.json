@@ -1,0 +1,401 @@
+{
+ "fedb": {
+  "spider": [
+   "Worlds_Greatest_Stretch",
+   [
+    "Big lunge, elbow drops to the inside of the front foot",
+    "Then rotate and reach the same arm to the ceiling",
+    "Back knee can rest down if needed"
+   ],
+   "Closest match: world's greatest stretch (same lunge + reach)"
+  ],
+  "dham": [
+   "Hamstring_Stretch",
+   [
+    "Band over the ball of the foot, knee straight",
+    "Ease in and hold 30-45 s, no bouncing",
+    "Other leg stays flat on the floor"
+   ],
+   ""
+  ],
+  "sham": [
+   "Hamstring_Stretch",
+   [
+    "Band over the ball of the foot, knee straight",
+    "Ease in, no bouncing",
+    "Other leg stays flat"
+   ],
+   ""
+  ],
+  "pallof": [
+   "Pallof_Press_With_Rotation",
+   [
+    "Press out, then turn the chest away from the anchor",
+    "Hips stay square, come back slowly",
+    "Do it half-kneeling with a band in the plan"
+   ],
+   "Shown standing with a cable"
+  ],
+  "slrdlslow": [
+   "Kettlebell_One-Legged_Deadlift",
+   [
+    "Hips stay square to the floor",
+    "Lower over 3 s to a hamstring stretch",
+    "Flat back, soft standing knee"
+   ],
+   ""
+  ],
+  "hamslrdl": [
+   "Kettlebell_One-Legged_Deadlift",
+   [
+    "Hips square, 3 s lowering",
+    "Flat back, reach the free leg long",
+    "Stop if you cramp"
+   ],
+   ""
+  ],
+  "pullapart": [
+   "Band_Pull_Apart",
+   [
+    "Straight arms at shoulder height",
+    "Squeeze the shoulder blades together",
+    "Control the band back in"
+   ],
+   ""
+  ],
+  "wuer": [
+   "External_Rotation_with_Band",
+   [
+    "Elbow pinned to your side",
+    "Rotate the forearm out, slow return",
+    "No shrugging"
+   ],
+   ""
+  ],
+  "fig4": [
+   "Ankle_On_The_Knee",
+   [
+    "Ankle on the opposite knee",
+    "Pull the bottom thigh toward you",
+    "Keep the low back flat, relax the neck"
+   ],
+   ""
+  ],
+  "shipflex": [
+   "Kneeling_Hip_Flexor",
+   [
+    "Tuck the pelvis under first",
+    "Squeeze the back-leg glute",
+    "Reach the same-side arm up"
+   ],
+   ""
+  ],
+  "childlat": [
+   "Childs_Pose",
+   [
+    "Sit back toward the heels",
+    "Walk both hands to one side for the side reach",
+    "Breathe into the ribs"
+   ],
+   "Shown without the side reach"
+  ],
+  "slbridge": [
+   "Single_Leg_Glute_Bridge",
+   [
+    "Push through the heel",
+    "Hips stay level",
+    "Lower slowly"
+   ],
+   ""
+  ],
+  "hambridge": [
+   "Single_Leg_Glute_Bridge",
+   [
+    "Push through the heel, hips level",
+    "Lower slowly",
+    "Bodyweight only"
+   ],
+   ""
+  ],
+  "bound": [
+   "Lateral_Bound",
+   [
+    "Push off the outside foot",
+    "Land on the other foot, knee over toes",
+    "Stick each landing for 2 s"
+   ],
+   ""
+  ],
+  "hamrdl": [
+   "Romanian_Deadlift",
+   [
+    "Bar close to the legs, soft knees",
+    "Push the hips back, lower over 3 s",
+    "Flat back; stop at a hamstring stretch"
+   ],
+   ""
+  ],
+  "hamnordic": [
+   "Natural_Glute_Ham_Raise",
+   [
+    "Feet anchored, hips straight",
+    "Lower over 3-5 s, catch with your hands",
+    "Use a band from above for help"
+   ],
+   "Shown on a bench without the assist band"
+  ],
+  "kneeljump": [
+   "Kneeling_Jump_Squat",
+   [
+    "Kneel tall on a pad, swing the arms",
+    "Pop both feet under you",
+    "Land balanced in a squat"
+   ],
+   "Shown with a bar; do it bodyweight"
+  ],
+  "swap_pause": [
+   "Freehand_Jump_Squat",
+   [
+    "Squat down and pause 2 s",
+    "Jump straight up",
+    "Land soft and quiet"
+   ],
+   "Add the 2 s pause at the bottom"
+  ],
+  "swap_cmj": [
+   "Freehand_Jump_Squat",
+   [
+    "Quick dip with an arm swing",
+    "Jump tall",
+    "Stick the landing for 2 s"
+   ],
+   ""
+  ],
+  "boxjump": [
+   "Front_Box_Jump",
+   [
+    "Use a low box or bench",
+    "Land soft with hips back",
+    "Step down, don't jump down"
+   ],
+   "Shown without the slam ball"
+  ],
+  "chestpass": [
+   "Supine_Chest_Throw",
+   [
+    "Ball on the chest, both hands",
+    "Push up as fast as you can",
+    "Catch and reset each rep"
+   ],
+   ""
+  ],
+  "splitsq": [
+   "Split_Squats",
+   [
+    "Torso tall, front heel down",
+    "Back knee lowers under the hip",
+    "Bodyweight or empty bar only"
+   ],
+   ""
+  ],
+  "plyopush": [
+   "Plyo_Push-up",
+   [
+    "Push hard enough that the hands leave",
+    "Land soft with bent elbows",
+    "Start with hands on a bench"
+   ],
+   ""
+  ],
+  "trapdl": [
+   "Trap_Bar_Deadlift",
+   [
+    "Stand in the middle, grip the handles",
+    "Flat back, push the floor away",
+    "Stop 2 reps short of failure"
+   ],
+   ""
+  ],
+  "bench": [
+   "Barbell_Bench_Press_-_Medium_Grip",
+   [
+    "Shoulder blades pinched, feet planted",
+    "Lower to mid-chest under control",
+    "Press up and slightly back"
+   ],
+   ""
+  ],
+  "row": [
+   "Bent_Over_Barbell_Row",
+   [
+    "Hinge to about 45 degrees, flat back",
+    "Pull the bar to the belly",
+    "Lower with control"
+   ],
+   ""
+  ],
+  "broad": [
+   "Standing_Long_Jump",
+   [
+    "Swing the arms and jump forward",
+    "Land soft and stick it",
+    "Measure to the heel"
+   ],
+   ""
+  ]
+ },
+ "videos": {
+  "d9090": [
+   "m51AZSXMvEA"
+  ],
+  "s9090": [
+   "m51AZSXMvEA"
+  ],
+  "dbook": [
+   "YMswmjk7Qj4"
+  ],
+  "aslr": [
+   "Fz4h7LFxTHk"
+  ],
+  "liftoff": [
+   "9CqHJFJhOOw"
+  ],
+  "bandir": [
+   "PzWue7bprsE"
+  ],
+  "pallof": [
+   "qxBnFaDYeDY"
+  ],
+  "bander9090": [
+   "67dz9MJ63xc"
+  ],
+  "stepover": [
+   "ieTCzIh07RI"
+  ],
+  "rotthrow": [
+   "NJv918hUxJ8"
+  ],
+  "s2f": [
+   "FBQjnEAp8iI"
+  ],
+  "buildup": [
+   "FBQjnEAp8iI"
+  ],
+  "swingfb": [
+   "8_-3xijRzVE"
+  ],
+  "swingss": [
+   "8_-3xijRzVE"
+  ],
+  "lungerot": [
+   "5IYEoYBnjiI"
+  ],
+  "latwalk": [
+   "6eoK_yxY8Ak"
+  ],
+  "halo": [
+   "LEjVh4scVy4"
+  ],
+  "clubturn": [
+   "8qSSzsQ1RI0"
+  ],
+  "gf": [
+   "wGdQCfwimoY"
+  ],
+  "wiper": [
+   "0Y8LL_MCmBg"
+  ],
+  "thread": [
+   "gyew25Vaqj8"
+  ],
+  "sankle": [
+   "ElrpduJn92Y"
+  ],
+  "legswall": [
+   "do_1LisFah0"
+  ],
+  "trapjump": [
+   "rZGkx5PaZSM"
+  ],
+  "swap_trap": [
+   "rZGkx5PaZSM"
+  ],
+  "slrdl": [
+   "I37TdFmIyhY"
+  ],
+  "shotput": [
+   "iwsq_LPOl_8"
+  ],
+  "latlunge": [
+   "QaA6CEVw7nk"
+  ],
+  "stepin": [
+   "XeiGEDzzIGQ"
+  ],
+  "scoop": [
+   "mxf1D3NtxMo"
+  ],
+  "swap_scoop": [
+   "t6AjwjZjzkA"
+  ],
+  "swap_swing": [
+   "LBhaLLc153A"
+  ],
+  "swap_pause": [
+   "fkozv_ZJFSQ"
+  ],
+  "hamcurl": [
+   "LtTcXXgeRYo"
+  ],
+  "hip1": [
+   "PKDN2adjySY",
+   "gmDXjCxHVl4"
+  ],
+  "hip2": [
+   "PKDN2adjySY",
+   "NEHxjrNc2wk"
+  ],
+  "hip3": [
+   "PKDN2adjySY",
+   "WLuYol-hCS8"
+  ],
+  "hip5": [
+   "UiD0uKwbc10",
+   "GZwxGqtX340"
+  ],
+  "hip8": [
+   "UiD0uKwbc10",
+   "6UUyGzE1WBQ"
+  ],
+  "hip6": [
+   "UiD0uKwbc10",
+   "Z-Z--uOzefs"
+  ],
+  "hip4": [
+   "UiD0uKwbc10",
+   "74mxcpiINhk"
+  ],
+  "hip7": [
+   "UiD0uKwbc10",
+   "ynGQy_GOfrQ"
+  ],
+  "wladder": [
+   "0N9eVJxpZGY"
+  ],
+  "wrandom": [
+   "GaYtR1aoFYY"
+  ],
+  "gate": [
+   "lA7yzd_XSi4"
+  ],
+  "lagladder": [
+   "MducFYxKUmQ"
+  ],
+  "make10": [
+   "eEfSKcvi4e4"
+  ],
+  "thestack": [
+   "OOFPqyR1GKs"
+  ]
+ }
+}

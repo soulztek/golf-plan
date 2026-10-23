@@ -43,7 +43,7 @@ export function Section(props: { heading?: string; caption?: string; collapsible
   return (
     <section style={{ background: t.bg.sunken, border: `1px solid ${t.border.default}`, borderRadius: t.radius.xl, padding: 14, display: "grid", gap: 12, minWidth: 0 }}>
       {props.heading && (
-        <div onClick={props.collapsible ? () => setOpen(!open) : undefined} style={{ cursor: props.collapsible ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div onClick={props.collapsible ? () => setOpen(!open) : undefined} role={props.collapsible ? "button" : undefined} aria-expanded={props.collapsible ? open : undefined} tabIndex={props.collapsible ? 0 : undefined} onKeyDown={props.collapsible ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!open); } } : undefined} style={{ cursor: props.collapsible ? "pointer" : "default", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 650 as any, lineHeight: "24px" }}>{props.heading}</div>
             {props.caption && <div style={{ fontSize: 13, color: t.text.tertiary, marginTop: 2 }}>{props.caption}</div>}
