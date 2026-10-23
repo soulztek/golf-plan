@@ -844,6 +844,8 @@ const GOLF_KEYS: CheckKey[] = ["wedges", "putting", "sim", "eighteen", "nine"];
 const TRAIN_KEYS: CheckKey[] = ["mobility", "hipmini", "strength", "speed", "hips", "wedges", "putting", "sim", "eighteen", "nine", "recovery"];
 const UI_KEY = "golf-speed-plan-ui";
 const DAILY_ACCENT = "#f5b800";
+const HOME_BG = "#131315";
+const HOME_VARS: any = { "--bg": HOME_BG, "--card": "#1d1e22", "--elev": "#1d1e22", "--fill2": "#26282e", "--border": "#2c2e35", "--border-strong": "#4d515b", "--text": "#f1f3f6", "--text2": "#adb3bd", "--text3": "#80868f", "--glass": "rgba(24,25,30,0.72)", "--nav": "rgba(16,16,19,0.94)", "--shadow": "0 6px 22px rgba(0,0,0,0.45)", "--accent-subtle": "rgba(92,201,138,0.14)", "--zebra": "rgba(255,255,255,0.03)", "--link": "#8fe0b0", colorScheme: "dark" };
 const DEMO_RULES: [RegExp, string][] = [
   [/trap bar jump/i, "trapjump"], [/lateral bound/i, "bound"], [/single-leg RDL to knee/i, "slrdl"], [/shot-put/i, "shotput"],
   [/^Trap bar deadlift/i, "trapdl"], [/^Bench press/i, "bench"], [/Romanian deadlift/i, "hamrdl"], [/Nordic/i, "hamnordic"],
@@ -907,7 +909,7 @@ export default function App() {
     try { window.localStorage.setItem(STORE_KEY, JSON.stringify(store)); setSaved(true); } catch (_e) { setSaved(false); }
   }, [store]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab, nav, detail]);
-  useEffect(() => { try { window.localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_e) {} document.documentElement.setAttribute("data-theme", ui.dark ? "dark" : "light"); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", ui.dark ? "#0b1510" : "#f3f6f9"); }, [ui]);
+  useEffect(() => { try { window.localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_e) {} document.documentElement.setAttribute("data-theme", ui.dark ? "dark" : "light"); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", nav === "home" ? HOME_BG : ui.dark ? "#0b1510" : "#f3f6f9"); document.body.style.background = nav === "home" ? HOME_BG : ""; }, [ui, nav]);
   const go = (where: string) => { setDetail(null); setPlayer(null); if (where === "stretch") { setNav("daily"); window.setTimeout(() => { const el = document.getElementById("timer"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); } else if (["home", "daily", "workout", "golf"].indexOf(where) >= 0) setNav(where); else { setNav("more"); setTab(where); } };
 
   const todayIso = iso(now);
@@ -1070,31 +1072,35 @@ export default function App() {
   const moreTitles: Record<string, string> = { plan: "Weekly plan", phases: "12 weeks", log: "Log + backup", assess: "Tests", food: "Food", drills: "Drills + how-to", settings: "Settings", today: "Full day view" };
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+    <div style={{ ...(nav === "home" ? HOME_VARS : {}), minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
       <main style={{ ...(nav === "daily" ? { "--primary": "#d9a300" } : {}), maxWidth: 760, margin: "0 auto", padding: "0 14px calc(env(safe-area-inset-bottom) + 96px)", display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14 }}>
       {nav === "home" && (
         <Fragment>
-          <Hero photo={PHOTO.home} height={560} position="center 62%">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.9 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: -0.5, lineHeight: "36px", textShadow: "0 1px 8px rgba(0,0,0,0.25)" }}>{`Hi, ${ui.name || "Golfer"}`}</div>
-                <div style={{ fontSize: 16, opacity: 0.95 }}>Let's check your activity</div>
+          <div style={{ position: "relative", margin: "0 -14px", background: HOME_BG, minHeight: "calc(min(100vw, 400px) * 1.782)", overflow: "hidden" }}>
+            <img src={PHOTO.dontSleep} alt="Don't sleep. Jalen Brunson, number 11, hand raised" width={335} height={597} style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "min(100vw, 400px)", height: "auto", display: "block" }} />
+            <div aria-hidden style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, ${HOME_BG} 0%, rgba(19,19,21,0) calc(50% - 200px), rgba(19,19,21,0) calc(50% + 200px), ${HOME_BG} 100%), linear-gradient(180deg, rgba(19,19,21,0) 0%, rgba(19,19,21,0) 62%, rgba(19,19,21,0.55) 80%, ${HOME_BG} 100%)` }} />
+            <div style={{ position: "relative", padding: "calc(env(safe-area-inset-top) + 12px) 16px 18px", color: "#f1f3f6" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
+                  <div style={{ fontSize: 18, fontWeight: 800 }}>{`Hi, ${ui.name || "Golfer"}`}<span style={{ fontSize: 13, fontWeight: 500, opacity: 0.75 }}> · Let's check your activity</span></div>
+                </div>
+                <button onClick={() => go("settings")} aria-label="Settings" style={{ width: 40, height: 40, flex: "0 0 auto", borderRadius: 20, border: "2px solid rgba(255,255,255,0.6)", background: "rgba(255,255,255,0.12)", padding: 0, overflow: "hidden", cursor: "pointer" }}><img src="./icons/icon-192.png" alt="" width={36} height={36} style={{ width: "100%", height: "100%", display: "block" }} /></button>
               </div>
-              <button onClick={() => go("settings")} aria-label="Settings" style={{ width: 54, height: 54, borderRadius: 27, border: "3px solid rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.25)", padding: 0, overflow: "hidden", cursor: "pointer" }}><img src="./icons/icon-192.png" alt="" width={48} height={48} style={{ width: "100%", height: "100%", display: "block" }} /></button>
+              <div style={{ height: "calc(min(100vw, 400px) * 0.66 - 64px)" }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 0 }}>
+                <StatCard big emoji="✅" label="Today" value={`${dayPct}%`} detail={`${doneCount} of ${items.length} tasks done`} onClick={() => go(upNext ? catOf(upNext.key) : "daily")} />
+                <StatCard emoji="🔥" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
+                <StatCard emoji="⏱️" label="Time spent" value={`${minutesDone}`} unit={`of ${minutesPlanned} min`} />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit={`mph · goal 110 (${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} to go)`} onClick={() => go("golf")} />
+                <div style={{ marginTop: 8 }}><Bar value={(lastSpeed - 90) / 20} color="#f1f3f6" track="rgba(255,255,255,0.18)" /></div>
+              </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 18 }}>
-              <StatCard big emoji="✅" label="Today" value={`${dayPct}%`} detail={`${doneCount} of ${items.length} tasks done`} onClick={() => go(upNext ? catOf(upNext.key) : "daily")} />
-              <StatCard emoji="🔥" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
-              <StatCard emoji="⏱️" label="Time spent" value={`${minutesDone}`} unit={`of ${minutesPlanned} min`} />
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit={`mph · goal 110 (${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} to go)`} onClick={() => go("golf")} />
-              <div style={{ marginTop: 8 }}><Bar value={(lastSpeed - 90) / 20} color="#ffffff" track="rgba(255,255,255,0.35)" /></div>
-            </div>
-          </Hero>
+          </div>
           {upNext ? (
-            <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, border: "none", borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)", marginTop: -40, position: "relative", zIndex: 2 }}>
+            <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, border: "none", borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)", marginTop: -6, position: "relative", zIndex: 2 }}>
               <span aria-hidden style={{ fontSize: 28 }}>🎯</span>
               <span style={{ flex: 1 }}>
                 <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: 0.6 }}>{`Up next${upNext.b ? ` · ${fmtHour(upNext.b.s)}` : ""}`}</span>
@@ -1103,7 +1109,7 @@ export default function App() {
               <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
             </button>
           ) : (
-            <div style={{ padding: 16, borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", marginTop: -40, position: "relative", zIndex: 2, fontWeight: 700 }}>🎉 Everything done today. Nice work.</div>
+            <div style={{ padding: 16, borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", marginTop: -6, position: "relative", zIndex: 2, fontWeight: 700 }}>🎉 Everything done today. Nice work.</div>
           )}
           <SectionTitle>Today by category</SectionTitle>
           <div className="hscroll" style={{ margin: "0 -14px", padding: "2px 14px 8px" }}>
@@ -1158,14 +1164,12 @@ export default function App() {
 
       {nav === "daily" && (
         <Fragment>
-          <div style={{ margin: "0 -14px", paddingTop: "env(safe-area-inset-top)", borderRadius: "0 0 28px 28px", background: "#000", color: DAILY_ACCENT, overflow: "hidden" }}>
-            <img src={PHOTO.daily} alt="Quote: You are allowed to think about the worst possible scenario. But then you got to go out there and do something about it. Jalen Brunson" width={389} height={514} style={{ display: "block", width: "100%", maxWidth: 440, height: "auto", aspectRatio: "389 / 514", objectFit: "contain", margin: "0 auto" }} />
-            <div style={{ padding: "12px 18px 18px", borderTop: "1px solid rgba(245,184,0,0.25)" }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ fontSize: 26, fontWeight: 800 }}>Daily</div>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done`}</div>
-              </div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", margin: "2px 0 10px" }}>Mobility, hips, sleep, food</div>
+          <div style={{ margin: "0 -14px", padding: "calc(env(safe-area-inset-top) + 10px) 16px 14px", borderRadius: "0 0 24px 24px", background: "#000", color: DAILY_ACCENT, display: "flex", alignItems: "center", gap: 14 }}>
+            <img src={PHOTO.daily} alt="Quote: You are allowed to think about the worst possible scenario. But then you got to go out there and do something about it. Jalen Brunson" width={389} height={514} style={{ display: "block", height: 210, width: "auto", aspectRatio: "389 / 514", flex: "0 0 auto", borderRadius: 10 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: "32px" }}>Daily</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", margin: "4px 0 12px" }}>Mobility, hips, sleep, food</div>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done`}</div>
               <Bar value={fracOf(dailyItems)} color={DAILY_ACCENT} track="rgba(255,255,255,0.18)" />
             </div>
           </div>
