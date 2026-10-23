@@ -27,7 +27,8 @@ interface LogEntry { date: string; kind: LogKind; value: number; note?: string; 
 interface AssessRec { date: string; results: Record<string, string>; }
 interface GameRec { date: string; id: string; score: number; }
 interface TestRec { date: string; v: Record<string, string>; }
-interface Store { days: Record<string, DayRec>; logs: LogEntry[]; assess: AssessRec[]; games: GameRec[]; tests: TestRec[]; startDate?: string; seeded?: boolean; }
+interface WedgeRec { date: string; ladder: "A" | "B"; hits: number[]; shots: number[]; done?: boolean; }
+interface Store { days: Record<string, DayRec>; logs: LogEntry[]; assess: AssessRec[]; games: GameRec[]; tests: TestRec[]; wedge: WedgeRec[]; startDate?: string; seeded?: boolean; }
 
 const STORE_KEY = "golf-speed-plan-v1";
 const TZ = "America/New_York";
@@ -202,13 +203,17 @@ const HAM_SAT: Omit<Session, "start"> = {
     { name: "Banded hamstring curl", dose: "2 x 12", rest: "45 s", load: "Lying face down, band anchored low around the ankle; 3 s return", min: 5 },
   ],
 };
+const WEDGE_LADDERS: Record<"A" | "B", { targets: number[]; shots: number }> = {
+  A: { targets: [10, 30, 50, 70, 90, 110], shots: 5 },
+  B: { targets: [20, 40, 60, 80, 100], shots: 6 },
+};
+const winOf = (y: number): string => `${Math.round(y * 0.9)}-${Math.round(y * 1.1)}`;
 const WEDGE30: Omit<Session, "start"> = {
-  name: "Rapsodo wedge distance (30 min)", key: "wedges",
-  goal: "Score: random-distance balls that finish within 5 yd of the target, out of 10.",
+  name: "Rapsodo wedge ladder (30 min, A/B alternating)", key: "wedges",
+  goal: "Sessions alternate Ladder A (10, 30, 50, 70, 90, 110 yd) and Ladder B (20, 40, 60, 80, 100 yd); the app picks the next one. A hit is a carry within 10% of the target (50 yd = 45-55). Score: hits out of 30 shots (session %), saved on Today and shown on the Log tab.",
   items: [
-    { name: "Warm-up wedges", dose: "10 easy balls", rest: "-", load: "Wedges", min: 5 },
-    { name: "Ladder 30-100 yd in 10-yd steps", dose: "3 balls each distance (24 balls)", rest: "Full routine each ball", load: "Wedges; goal within ±5 yd", min: 15 },
-    { name: "Random-distance test", dose: "10 balls, new distance each ball (30-100 yd)", rest: "-", load: "Score = number within 5 yd", min: 10 },
+    { name: "Warm-up wedges", dose: "8-10 easy balls", rest: "-", load: "Wedges, build to full speed", min: 5 },
+    { name: "Ladder A or B with the hit counter", dose: "A: 6 targets x 5 shots; B: 5 targets x 6 shots (30 shots either way)", rest: "Full routine each ball, about 50 s per shot", load: "Hit = carry within ±10% of target; tap Hit or Miss on Today", min: 25 },
   ],
 };
 const PUTT20: Omit<Session, "start"> = {
@@ -311,7 +316,7 @@ const PLAN: Record<DayKey, DayPlan> = {
     am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block, 6:34-7:04 TheStack, 7:04-7:14 hip block",
     pm: "4:30-5:00 wedges, 5:00-5:20 putting",
     checks: ["wake", "mobility", "hipmini", "speed", "hips", "wedges", "putting", "protein", "water", "screens", "bed"],
-    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34; lower effort if legs are sore)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge distance 30 min (4:30)", putting: "Putting 20 min (5:00)" },
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34; lower effort if legs are sore)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge ladder 30 min (4:30)", putting: "Putting 20 min (5:00)" },
     parts: [
       { kind: "stretch", routine: "daily", start: T(6, 10) },
       { kind: "session", s: at(HIP_MINI, T(6, 30)) },
@@ -326,7 +331,7 @@ const PLAN: Record<DayKey, DayPlan> = {
     am: "6:10-6:28 mobility (no throws), 6:28-6:32 hip mini-block, 6:32-7:19 Strength B",
     pm: "4:30-5:00 wedges, 6:45-8:05 GSPro sim 18",
     checks: ["wake", "mobility", "hipmini", "strength", "wedges", "sim", "protein", "water", "screens", "bed"],
-    labels: { mobility: "Mobility + strength, 18 min (6:10, no throws)", hipmini: "Daily hip mini-block, 4 min (6:28)", strength: "Strength B, moderate legs (6:32)", wedges: "Wedge distance 30 min (4:30)", sim: "GSPro sim 18, front tees, no driver (6:45)" },
+    labels: { mobility: "Mobility + strength, 18 min (6:10, no throws)", hipmini: "Daily hip mini-block, 4 min (6:28)", strength: "Strength B, moderate legs (6:32)", wedges: "Wedge ladder 30 min (4:30)", sim: "GSPro sim 18, front tees, no driver (6:45)" },
     parts: [
       { kind: "stretch", routine: "dailylift", start: T(6, 10) },
       { kind: "session", s: at(HIP_MINI, T(6, 28)) },
@@ -354,7 +359,7 @@ const PLAN: Record<DayKey, DayPlan> = {
     am: "6:10-6:30 mobility, 6:30-6:34 hip mini-block, 6:34-7:04 TheStack, 7:04-7:14 hip block, 7:14-7:24 optional hamstrings, 7:30-8:20 wedges + putting",
     pm: "Free (swap option: one GSPro sim 18 here instead of Tue or Thu)",
     checks: ["wake", "mobility", "hipmini", "speed", "hips", "wedges", "putting", "protein", "water", "screens", "bed"],
-    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge distance 30 min (7:30)", putting: "Putting 20 min (8:00)" },
+    labels: { hipmini: "Daily hip mini-block, 4 min (6:30)", speed: "TheStack (6:34)", hips: "Hip block, 10 min (7:04)", wedges: "Wedge ladder 30 min (7:30)", putting: "Putting 20 min (8:00)" },
     parts: [
       { kind: "stretch", routine: "daily", start: T(6, 10) },
       { kind: "session", s: at(HIP_MINI, T(6, 30)) },
@@ -384,7 +389,7 @@ const TEST_PLAN: DayPlan = {
   am: "6:25 warm-up, 6:30-7:08 tests, 9:00 mobility score, 9:15 hip mini-block",
   pm: "4:30-5:00 wedges, 5:00-5:20 putting",
   checks: ["wake", "mobility", "hipmini", "speed", "wedges", "putting", "protein", "water", "screens", "bed"],
-  labels: { hipmini: "Daily hip mini-block, 4 min (9:15, after the mobility test)", speed: "Testing Day tests (6:30)", mobility: "Mobility score test (9:00, Pliability or GOWOD)", wedges: "Wedge distance 30 min (4:30)", putting: "Putting 20 min (5:00)" },
+  labels: { hipmini: "Daily hip mini-block, 4 min (9:15, after the mobility test)", speed: "Testing Day tests (6:30)", mobility: "Mobility score test (9:00, Pliability or GOWOD)", wedges: "Wedge ladder 30 min (4:30)", putting: "Putting 20 min (5:00)" },
   testing: true,
   parts: [
     { kind: "stretch", routine: "warmup", start: T(6, 25) },
@@ -401,7 +406,7 @@ const JS_DAYS: DayKey[] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const BASE_LABELS: Record<string, string> = {
   nine: "9 holes", hips: "Hip block", hipmini: "Daily hip mini-block, 4 min", wake: "Up by 6:00",
   mobility: "Mobility + strength routine, 20 min (6:10)", strength: "Strength session", speed: "TheStack speed (6:34)",
-  wedges: "Wedge distance 30 min", putting: "Putting 20 min", sim: "GSPro sim 18 (light)", eighteen: "18 holes",
+  wedges: "Wedge ladder 30 min", putting: "Putting 20 min", sim: "GSPro sim 18 (light)", eighteen: "18 holes",
   recovery: "Recovery walk 30 min", review: "Weekly review + meal prep", protein: "Protein at every meal",
   water: "Water: 3 bottles", screens: "Screens off by 9:45 (after check-in)", bed: "In bed by 10:00",
 };
@@ -532,8 +537,7 @@ const DRILLS: Drill[] = [
   { id: "hip4", group: "Hips", name: "Banded hip rockbacks (half-kneel or lizard)", days: [], when: "Optional swap in the Wed/Sat hip block", time: "2 min", reps: "1 x 10/side, band pulling the thigh back", cue: "Lean away from the band as you rock back.", pass: "10 smooth rocks each side, no pinching.", credit: HIPV2 },
   { id: "hip7", group: "Hips", name: "Banded anti-valgus split squat", days: [], when: "Optional swap in the Wed/Sat hip block (never Thu or Sun)", time: "2 min", reps: "2 x 6/side, bodyweight", cue: "Don't let the knee cave into the band; weight on the front foot.", pass: "All reps with the knee over the foot.", credit: HIPV2 },
   { id: "transfer", group: "Golf", name: "Speed-to-course transfer", days: ["Mon", "Wed", "Sat"], when: "Right after TheStack, about 6:57", time: "5 min", reps: "5 max drives on Rapsodo with a ball", cue: "Shoes on, real ball, full routine, max intent.", pass: "Best club speed and ball speed logged on the Log tab." },
-  { id: "wladder", group: "Golf", name: "Wedge ladder 30-100 yd", days: ["Wed", "Thu", "Sat"], when: "Wedge night, 5 min after warm-up", time: "15 min", reps: "10-yd steps, 3 balls each (24 balls)", cue: "Full routine every ball; read the carry on Rapsodo.", pass: "All 8 distances done; note which are outside ±5 yd." },
-  { id: "wrandom", group: "Golf", name: "Random-distance wedge test", days: ["Wed", "Thu", "Sat"], when: "End of the wedge session", time: "10 min", reps: "10 balls, new distance each ball", cue: "Pick a random distance from 30-100 yd before each ball.", pass: "Score (balls within 5 yd, out of 10) saved on Today." },
+  { id: "wladder", group: "Golf", name: "Wedge ladder A/B (alternates each session)", days: ["Wed", "Thu", "Sat"], when: "Wedge session, after 5 min of warm-up balls", time: "25 min", reps: "A: 10, 30, 50, 70, 90, 110 yd x 5 shots; B: 20, 40, 60, 80, 100 yd x 6 shots (30 shots)", cue: "Full routine every ball; read the carry on Rapsodo. Hit = carry within 10% of the target (50 yd = 45-55). Tap Hit or Miss on Today.", pass: "All 30 shots logged; session % saved (shown on the Log tab)." },
   { id: "gate", group: "Golf", name: "Gate drill 3-4 ft", days: ["Tue", "Wed", "Sat"], when: "Start of putting", time: "5 min", reps: "Continuous putts through a tee gate", cue: "Two tees just wider than the putter head; start the ball through the gate.", pass: "5 minutes of clean starts through the gate." },
   { id: "lagladder", group: "Golf", name: "Lag ladder 10-20-30 ft", days: ["Tue", "Wed", "Sat"], when: "Middle of putting", time: "10 min", reps: "Rounds of 3 balls at each distance", cue: "Pace first; picture the ball dying at the hole.", pass: "Most putts finish within 18 in." },
   { id: "make10", group: "Golf", name: "Make 10 in a row from 3 ft", days: ["Tue", "Wed", "Sat"], when: "End of putting", time: "5 min", reps: "Restart on any miss", cue: "Same routine on every putt.", pass: "10 in a row made; attempts saved on Today." },
@@ -542,7 +546,6 @@ const DRILLS: Drill[] = [
   { id: "round9", group: "Golf", name: "Friday 9 holes (18 again from about mid-March)", days: ["Fri"], when: "Warm-up 3:00, tee about 3:15 PM, done about 5:15", time: "About 2 h", reps: "9 holes, one focus", cue: "Beat the 5 PM sunset: keep a steady pace, one focus.", pass: "Score saved on Today." },
 ];
 const GAMES: GameDef[] = [
-  { id: "wrandom", name: "Wedge random test", scoring: "Balls within 5 yd, out of 10", higher: true, days: ["Wed", "Thu", "Sat"] },
   { id: "make10", name: "Make 10 in a row", scoring: "Attempts needed (10 is perfect, lower is better)", higher: false, days: ["Tue", "Wed", "Sat"] },
   { id: "simgir", name: "Sim 18 greens hit", scoring: "Greens in regulation, out of 18", higher: true, days: ["Tue", "Thu"] },
   { id: "simprox", name: "Sim 18 proximity", scoring: "Average approach proximity in feet (lower is better)", higher: false, days: ["Tue", "Thu"] },
@@ -567,10 +570,10 @@ function clockParts(h: number) { const total = Math.round(h * 60); const hh = Ma
 function fmtHour(h: number): string { const p = clockParts(h); return `${p.c} ${p.mer}`; }
 function fmtRange(a: number, b: number): string { const x = clockParts(a); const y = clockParts(b); return x.mer === y.mer ? `${x.c}-${y.c} ${y.mer}` : `${x.c} ${x.mer}-${y.c} ${y.mer}`; }
 function mmss(s: number): string { const v = Math.max(0, Math.round(s)); return `${Math.floor(v / 60)}:${pad(v % 60)}`; }
-function emptyStore(): Store { return { days: {}, logs: [SEED_LOG], assess: [], games: [], tests: [], seeded: true }; }
+function emptyStore(): Store { return { days: {}, logs: [SEED_LOG], assess: [], games: [], tests: [], wedge: [], seeded: true }; }
 function normalize(parsed: Partial<Store>): Store {
   const logs = parsed.logs || [];
-  return { days: parsed.days || {}, logs: parsed.seeded ? logs : [SEED_LOG, ...logs], assess: parsed.assess || [], games: parsed.games || [], tests: parsed.tests || [], startDate: parsed.startDate, seeded: true };
+  return { days: parsed.days || {}, logs: parsed.seeded ? logs : [SEED_LOG, ...logs], assess: parsed.assess || [], games: parsed.games || [], tests: parsed.tests || [], wedge: Array.isArray(parsed.wedge) ? parsed.wedge : [], startDate: parsed.startDate, seeded: true };
 }
 function loadStore(): { store: Store; ok: boolean } {
   try {
@@ -796,6 +799,43 @@ const HOWTO_GROUPS: { title: string; open: boolean; items: { id: string; name: s
 ];
 const CREDIT_CHANNELS: string[] = Array.from(new Set(Object.values(DEMOS).flatMap((d: any) => (d.videos || []).map((v: any) => v.channel)))).sort();
 
+function WedgeCounter(props: { rec: WedgeRec; canSwitch: boolean; onShot: (i: number, hit: boolean) => void; onUndo: () => void; onSwitch: () => void; onFinish: () => void }) {
+  const t = useGrokTheme();
+  const L = WEDGE_LADDERS[props.rec.ladder];
+  const hits = props.rec.hits.reduce((a, b) => a + b, 0);
+  const shots = props.rec.shots.reduce((a, b) => a + b, 0);
+  const total = L.targets.length * L.shots;
+  const nextIdx = L.targets.findIndex((_y, i) => (props.rec.shots[i] || 0) < L.shots);
+  const small = (bg: string, fg: string) => ({ minHeight: 48, minWidth: 72, padding: "0 12px", borderRadius: 12, border: `1px solid ${t.border.default}`, background: bg, color: fg, fontSize: 16, fontWeight: 700, cursor: "pointer" });
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 15 }}>{`Ladder ${props.rec.ladder}: ${L.targets.length} targets x ${L.shots} shots`}</div>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{`${hits}/${shots}${shots ? ` · ${Math.round((hits / shots) * 100)}%` : ""}`}</div>
+      </div>
+      <ProgressBar value={shots / total} label={`${shots} of ${total} shots${nextIdx >= 0 ? ` · next: ${L.targets[nextIdx]} yd (hit ${winOf(L.targets[nextIdx])})` : " · all done"}`} />
+      {L.targets.map((y, i) => {
+        const sh = props.rec.shots[i] || 0; const h = props.rec.hits[i] || 0; const full = sh >= L.shots; const cur = i === nextIdx;
+        return (
+          <div key={y} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 14, border: `1px solid ${cur ? t.border.focus : t.border.default}`, background: cur ? t.fill.accentSubtle : t.bg.elevated, opacity: full && !cur ? 0.75 : 1 }}>
+            <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{`${y} yd`}</div>
+              <div style={{ fontSize: 13, color: t.text.secondary }}>{`Hit = ${winOf(y)} yd carry · ${h} hits · ${sh}/${L.shots} shots`}</div>
+            </div>
+            <button aria-label={`Hit at ${y} yards`} disabled={full} onClick={() => props.onShot(i, true)} style={{ ...small(full ? t.fill.secondary : t.fill.primary, "#fff"), opacity: full ? 0.5 : 1 }}>Hit</button>
+            <button aria-label={`Miss at ${y} yards`} disabled={full} onClick={() => props.onShot(i, false)} style={{ ...small(t.bg.elevated, t.text.primary), opacity: full ? 0.5 : 1 }}>Miss</button>
+          </div>
+        );
+      })}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button label="Undo last shot" onClick={props.onUndo} />
+        {props.canSwitch && <Button label={`Switch to Ladder ${props.rec.ladder === "A" ? "B" : "A"}`} onClick={props.onSwitch} />}
+      </div>
+      <Button variant="primary" label={props.rec.done ? "Session saved ✓ (tap to re-save)" : "Finish + save session"} onClick={props.onFinish} />
+    </div>
+  );
+}
+
 export default function App() {
   const initial = useMemo(() => loadStore(), []);
   const [store, setStore] = useState<Store>(initial.store);
@@ -892,7 +932,21 @@ export default function App() {
   };
   const testHistory: TestRec[] = [BASELINE_TEST, ...[...store.tests].sort((a, b) => (a.date < b.date ? -1 : 1))].slice(-5);
 
-  const labelFor = (p: DayPlan, k: CheckKey): string => p.labels[k] || BASE_LABELS[k];
+  // ----- Wedge ladder A/B -----
+  const wedgeToday: WedgeRec | undefined = store.wedge.find((w) => w.date === todayIso);
+  const wedgePrev = [...store.wedge].filter((w) => w.date < todayIso && w.shots.some((x) => x > 0)).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  const nextLadder: "A" | "B" = wedgeToday ? wedgeToday.ladder : wedgePrev ? (wedgePrev.ladder === "A" ? "B" : "A") : "A";
+  const blankWedge = (l: "A" | "B"): WedgeRec => ({ date: todayIso, ladder: l, hits: WEDGE_LADDERS[l].targets.map(() => 0), shots: WEDGE_LADDERS[l].targets.map(() => 0), seq: [] } as any);
+  const wedgeRec: WedgeRec = wedgeToday || blankWedge(nextLadder);
+  const putWedge = (w: WedgeRec) => setStore((s) => ({ ...s, wedge: [...s.wedge.filter((x) => x.date !== todayIso), w] }));
+  const wedgeShot = (i: number, hit: boolean) => { const w: any = JSON.parse(JSON.stringify(wedgeRec)); w.shots[i] += 1; if (hit) w.hits[i] += 1; w.seq = [...(w.seq || []), i * 2 + (hit ? 1 : 0)]; putWedge(w); };
+  const wedgeUndo = () => { const w: any = JSON.parse(JSON.stringify(wedgeRec)); const q = w.seq || []; if (!q.length) return; const last = q.pop(); const i = Math.floor(last / 2); w.shots[i] = Math.max(0, w.shots[i] - 1); if (last % 2) w.hits[i] = Math.max(0, w.hits[i] - 1); w.seq = q; putWedge(w); };
+  const wedgeShotsN = wedgeRec.shots.reduce((a, b) => a + b, 0);
+  const wedgeSwitch = () => { if (wedgeShotsN > 0 && !window.confirm("Switch ladders and clear today's shots?")) return; putWedge(blankWedge(wedgeRec.ladder === "A" ? "B" : "A")); };
+  const wedgeFinish = () => { if (wedgeShotsN === 0) return; putWedge({ ...wedgeRec, done: true }); setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, wedges: true } } } }; }); };
+  const wedgeHist = [...store.wedge].filter((w) => w.shots.some((x) => x > 0)).sort((a, b) => (a.date < b.date ? -1 : 1));
+  const wPct = (w: WedgeRec) => { const sh = w.shots.reduce((a, b) => a + b, 0); return sh ? Math.round((w.hits.reduce((a, b) => a + b, 0) / sh) * 100) : 0; };
+  const labelFor = (p: DayPlan, k: CheckKey): string => `${p.labels[k] || BASE_LABELS[k]}${k === "wedges" && p === plan ? ` · Ladder ${nextLadder}` : ""}`;
   const items = plan.checks.map((k) => ({ key: k, label: labelFor(plan, k), done: !!rec.c[k] }));
   const doneCount = items.filter((i) => i.done).length;
   const currentBlock = blocks.find((b) => hourNow >= b.s && hourNow < b.e);
@@ -985,6 +1039,12 @@ export default function App() {
             <Section heading={`Today's drills · ${todayDrillsDone} of ${todayDrills.length}`}>
               <ProgressBar value={todayDrillsDone / todayDrills.length} label="Tap a drill when you hit its finish line" />
               <DrillList drills={todayDrills} done={drillDone} onTap={toggleDrill} showDays={false} />
+            </Section>
+          )}
+
+          {plan.checks.indexOf("wedges") >= 0 && (
+            <Section heading={`Wedge ladder ${wedgeRec.ladder} · 30 min`} caption={`Alternates A/B each session (last: ${wedgePrev ? `${wedgePrev.ladder} on ${shortDate(wedgePrev.date)}` : "none yet, so A first"}). 5 min warm-up, then 30 shots. Hit = carry within 10% of the target.`}>
+              <WedgeCounter rec={wedgeRec} canSwitch={true} onShot={wedgeShot} onUndo={wedgeUndo} onSwitch={wedgeSwitch} onFinish={wedgeFinish} />
             </Section>
           )}
 
@@ -1088,7 +1148,7 @@ export default function App() {
           {(drillView === "Scores" || drillView === "All") && (
             <Section heading="Session scores and bests">
               <Table columns={["Score", "How it's scored", "Last", "Best", "Sessions"]} rows={GAMES.map((g) => { const rs = gameRecs(g.id); const b = bestOf(g); return [g.name, g.scoring, rs.length > 0 ? `${rs[rs.length - 1].score}` : "-", b !== undefined ? `${b}` : "-", `${rs.length}`]; })} align={["start", "start", "end", "end", "end"]} />
-              <Text>One score per session: wedges (random test), putting (make 10), sim (GIR and proximity), rounds (score, on the Log tab), TheStack (best speed).</Text>
+              <Text>One score per session: wedges (ladder hit %, on Today and the Log tab), putting (make 10), sim (GIR and proximity), rounds (score, on the Log tab), TheStack (best speed).</Text>
             </Section>
           )}
           {drillView === "HowTo" && (
@@ -1217,6 +1277,13 @@ export default function App() {
           )}
           {benchLogs.length >= 2 && <Section heading="Bench working weight"><LineChart points={lineFrom(benchLogs)} floor={0} ceiling={Math.max(225, ...benchLogs.map((l) => l.value))} unit="lb" labels={["Bench"]} format={(v) => `${v} lb`} /></Section>}
           {trapLogs.length >= 2 && <Section heading="Trap bar working weight"><LineChart points={lineFrom(trapLogs)} floor={0} ceiling={Math.max(225, ...trapLogs.map((l) => l.value))} unit="lb" labels={["Trap bar"]} format={(v) => `${v} lb`} /></Section>}
+          <Section heading="Wedge ladder sessions" caption="Hit = carry within 10% of the target. Ladders alternate A (10-110 yd) and B (20-100 yd).">
+            {wedgeHist.length >= 2 && <LineChart points={wedgeHist.slice(-12).map((w) => ({ label: `${shortDate(w.date)} ${w.ladder}`, value: wPct(w) }))} floor={0} ceiling={100} unit="%" labels={["Hit %"]} format={(v) => `${v}%`} />}
+            {wedgeHist.length > 0 ? (
+              <Table columns={["Date", "Ladder", "Hits", "%", "By target"]} rows={[...wedgeHist].reverse().slice(0, 12).map((w) => [shortDate(w.date), w.ladder, `${w.hits.reduce((a, b) => a + b, 0)}/${w.shots.reduce((a, b) => a + b, 0)}`, `${wPct(w)}%`, WEDGE_LADDERS[w.ladder].targets.map((y, i) => `${y}: ${w.hits[i] || 0}/${w.shots[i] || 0}`).join(", ")])} align={["start", "start", "end", "end", "start"]} />
+            ) : <Text>{`No wedge sessions yet. The next one is Ladder ${nextLadder}; log shots on the Today tab on Wed, Thu or Sat.`}</Text>}
+            <Table columns={["Ladder", "Targets (hit window)", "Shots"]} rows={(["A", "B"] as ("A" | "B")[]).map((l) => [l, WEDGE_LADDERS[l].targets.map((y) => `${y} (${winOf(y)})`).join(", "), `${WEDGE_LADDERS[l].shots} each = ${WEDGE_LADDERS[l].shots * WEDGE_LADDERS[l].targets.length}`])} align={["start", "start", "start"]} />
+          </Section>
           {scoreLogs.length > 0 && <Section heading="Round scores and handicap"><Table columns={["Date", "Type", "Value"]} rows={scoreLogs.slice(0, 12).map((l) => [shortDate(l.date), l.note ? `${nameOf(l.kind)} · ${l.note}` : nameOf(l.kind), `${l.value}`])} /></Section>}
           {store.logs.length > 0 && <Section heading="Recent entries"><Table columns={["Date", "Type", "Value"]} rows={[...store.logs].reverse().slice(0, 10).map((l) => [shortDate(l.date), l.note ? `${nameOf(l.kind)} · ${l.note}` : nameOf(l.kind), `${l.value}${unitOf(l.kind) ? ` ${unitOf(l.kind)}` : ""}`])} /></Section>}
           <Section heading="Backup" caption="Everything lives on this phone only. Export now and then; import to restore or move to a new phone.">

@@ -741,18 +741,14 @@ export const DEMOS: Record<string, any> = {
  "wladder": {
   "videos": [
    {
-    "id": "0N9eVJxpZGY",
-    "title": "Wedge Week: Dave Pelz swing tips for distance control | Golf Channel",
-    "channel": "Golf Channel"
-   }
-  ]
- },
- "wrandom": {
-  "videos": [
-   {
     "id": "GaYtR1aoFYY",
     "title": "Wedge Distance Control with Jason Day",
     "channel": "TaylorMade Golf"
+   },
+   {
+    "id": "0N9eVJxpZGY",
+    "title": "Wedge Week: Dave Pelz swing tips for distance control | Golf Channel",
+    "channel": "Golf Channel"
    }
   ]
  },
