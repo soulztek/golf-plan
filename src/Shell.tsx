@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { ReactNode } from "react";
 const BASE = (import.meta as any).env.BASE_URL || "./";
-export const PHOTO = { home: BASE + "photos/home.webp", bunker: BASE + "photos/bunker.webp", range: BASE + "photos/range.webp" };
+export const PHOTO = { home: BASE + "photos/home.webp", bunker: BASE + "photos/bunker.webp", range: BASE + "photos/range.webp", daily: BASE + "photos/daily.webp" };
 
 const P = { stroke: "currentColor", strokeWidth: 2, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" } as any;
 export const Icon = {
@@ -79,14 +79,14 @@ export function Bar(props: { value: number; color?: string; height?: number; tra
   return <div style={{ height: props.height || 6, borderRadius: 99, background: props.track || "var(--fill2)", overflow: "hidden" }}><div style={{ width: `${v * 100}%`, height: "100%", borderRadius: 99, background: props.color || "var(--primary)" }} /></div>;
 }
 
-export function CategoryCard(props: { title: string; color: string; lines: string[]; value: number; photo?: string; emoji?: string; onClick: () => void }) {
+export function CategoryCard(props: { title: string; color: string; lines: string[]; value: number; photo?: string; emoji?: string; ink?: string; onClick: () => void }) {
   return (
-    <button onClick={props.onClick} style={{ flex: "0 0 74%", maxWidth: 300, minHeight: 150, border: "none", borderRadius: 22, padding: 16, cursor: "pointer", textAlign: "left", color: "#fff", position: "relative", overflow: "hidden", background: props.photo ? `linear-gradient(90deg, ${props.color} 0%, ${props.color}e6 45%, ${props.color}33 100%), url(${props.photo}) center/cover` : props.color, boxShadow: "var(--shadow)", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 10 }}>
+    <button onClick={props.onClick} style={{ flex: "0 0 74%", maxWidth: 300, minHeight: 150, border: "none", borderRadius: 22, padding: 16, cursor: "pointer", textAlign: "left", color: props.ink || "#fff", position: "relative", overflow: "hidden", background: props.photo ? `linear-gradient(90deg, ${props.color} 0%, ${props.color}e6 45%, ${props.color}33 100%), url(${props.photo}) center/cover` : props.color, boxShadow: "var(--shadow)", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 10 }}>
       <div>
         <div style={{ fontSize: 22, fontWeight: 800 }}>{props.emoji ? `${props.emoji} ` : ""}{props.title}</div>
         {props.lines.map((l, i) => <div key={i} style={{ fontSize: 13.5, opacity: 0.95, marginTop: 4 }}>{l}</div>)}
       </div>
-      <Bar value={props.value} color="#ffffff" track="rgba(255,255,255,0.35)" />
+      <Bar value={props.value} color={props.ink || "#ffffff"} track="rgba(255,255,255,0.35)" />
     </button>
   );
 }

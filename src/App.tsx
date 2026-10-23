@@ -843,6 +843,7 @@ const WORK_KEYS: CheckKey[] = ["strength", "speed", "hips"];
 const GOLF_KEYS: CheckKey[] = ["wedges", "putting", "sim", "eighteen", "nine"];
 const TRAIN_KEYS: CheckKey[] = ["mobility", "hipmini", "strength", "speed", "hips", "wedges", "putting", "sim", "eighteen", "nine", "recovery"];
 const UI_KEY = "golf-speed-plan-ui";
+const DAILY_ACCENT = "#f5b800";
 const DEMO_RULES: [RegExp, string][] = [
   [/trap bar jump/i, "trapjump"], [/lateral bound/i, "bound"], [/single-leg RDL to knee/i, "slrdl"], [/shot-put/i, "shotput"],
   [/^Trap bar deadlift/i, "trapdl"], [/^Bench press/i, "bench"], [/Romanian deadlift/i, "hamrdl"], [/Nordic/i, "hamnordic"],
@@ -1070,7 +1071,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
-      <main style={{ maxWidth: 760, margin: "0 auto", padding: "0 14px calc(env(safe-area-inset-bottom) + 96px)", display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14 }}>
+      <main style={{ ...(nav === "daily" ? { "--primary": "#d9a300" } : {}), maxWidth: 760, margin: "0 auto", padding: "0 14px calc(env(safe-area-inset-bottom) + 96px)", display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14 }}>
       {nav === "home" && (
         <Fragment>
           <Hero photo={PHOTO.home} height={560} position="center 62%">
@@ -1106,7 +1107,7 @@ export default function App() {
           )}
           <SectionTitle>Today by category</SectionTitle>
           <div className="hscroll" style={{ margin: "0 -14px", padding: "2px 14px 8px" }}>
-            <CategoryCard title="Daily" emoji="☀️" color="#2f9e5c" lines={[`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} tasks`, "Mobility, hips, sleep, food"]} value={fracOf(dailyItems)} onClick={() => go("daily")} />
+            <CategoryCard title="Daily" emoji="☀️" color="#0b0b0b" ink={DAILY_ACCENT} lines={[`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} tasks`, "Mobility, hips, sleep, food"]} value={fracOf(dailyItems)} onClick={() => go("daily")} />
             <CategoryCard title="Workout" emoji="🏋️" color="#f2a93b" photo={PHOTO.bunker} lines={[workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"}` : "Rest from training", todayWorkouts.filter((w) => !w.optional).map((w) => w.title).join(" · ") || "Mobility only"]} value={workItems.length ? fracOf(workItems) : 1} onClick={() => go("workout")} />
             <CategoryCard title="Golf" emoji="⛳" color="#2f7fd8" photo={PHOTO.range} lines={[golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} ${golfItems.length === 1 ? "session" : "sessions"}` : "No golf today", plan.focus]} value={golfItems.length ? fracOf(golfItems) : 1} onClick={() => go("golf")} />
           </div>
@@ -1157,10 +1158,16 @@ export default function App() {
 
       {nav === "daily" && (
         <Fragment>
-          <div style={{ margin: "0 -14px", padding: "calc(env(safe-area-inset-top) + 16px) 18px 22px", borderRadius: "0 0 28px 28px", background: "linear-gradient(150deg, #2f9e5c 0%, #5cc98a 55%, #f2c94c 130%)", color: "#fff" }}>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>Daily</div>
-            <div style={{ fontSize: 14, opacity: 0.95 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done · mobility, hips, sleep, food`}</div>
-            <div style={{ marginTop: 12 }}><Bar value={fracOf(dailyItems)} color="#ffffff" track="rgba(255,255,255,0.35)" /></div>
+          <div style={{ margin: "0 -14px", paddingTop: "env(safe-area-inset-top)", borderRadius: "0 0 28px 28px", background: "#000", color: DAILY_ACCENT, overflow: "hidden" }}>
+            <img src={PHOTO.daily} alt="Quote: You are allowed to think about the worst possible scenario. But then you got to go out there and do something about it. Jalen Brunson" width={389} height={514} style={{ display: "block", width: "100%", maxWidth: 440, height: "auto", aspectRatio: "389 / 514", objectFit: "contain", margin: "0 auto" }} />
+            <div style={{ padding: "12px 18px 18px", borderTop: "1px solid rgba(245,184,0,0.25)" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontSize: 26, fontWeight: 800 }}>Daily</div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done`}</div>
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", margin: "2px 0 10px" }}>Mobility, hips, sleep, food</div>
+              <Bar value={fracOf(dailyItems)} color={DAILY_ACCENT} track="rgba(255,255,255,0.18)" />
+            </div>
           </div>
           {isTestingDay && (
             <Section heading="Testing Day today">
