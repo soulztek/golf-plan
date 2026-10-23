@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { ReactNode } from "react";
 const BASE = (import.meta as any).env.BASE_URL || "./";
-export const PHOTO = { home: BASE + "photos/home.webp", bunker: BASE + "photos/bunker.webp", range: BASE + "photos/range.webp", daily: BASE + "photos/daily.webp", dontSleep: BASE + "photos/home-dontsleep.webp" };
+export const PHOTO = { home: BASE + "photos/home.webp", bunker: BASE + "photos/bunker.webp", range: BASE + "photos/range.webp", daily: BASE + "photos/daily.webp", dontSleep: BASE + "photos/home-dontsleep.webp", avatar: BASE + "photos/avatar.webp" };
 
 const P = { stroke: "currentColor", strokeWidth: 2, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" } as any;
 export const Icon = {

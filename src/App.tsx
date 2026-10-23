@@ -888,6 +888,8 @@ export default function App() {
   const [openEx, setOpenEx] = useState<number | null>(null);
   const [ui, setUi] = useState<{ name?: string; dark?: boolean }>(loadUi());
   const [speedDraft, setSpeedDraft] = useState<string>("");
+  const [nameSheet, setNameSheet] = useState<boolean>(false);
+  const [nameDraft, setNameDraft] = useState<string>("");
   const [planDay, setPlanDay] = useState<string>(JS_DAYS[nyNow().getDay()]);
   const [routine, setRoutine] = useState<RoutineKey>(nyNow().getDay() === 0 ? "sunday" : "daily");
   const [drillView, setDrillView] = useState<string>("Today");
@@ -1085,7 +1087,7 @@ export default function App() {
                   <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
                   <div style={{ fontSize: 18, fontWeight: 800 }}>{`Hi, ${ui.name || "Golfer"}`}<span style={{ fontSize: 13, fontWeight: 500, opacity: 0.75 }}> · Let's check your activity</span></div>
                 </div>
-                <button onClick={() => go("settings")} aria-label="Settings" style={{ width: 40, height: 40, flex: "0 0 auto", borderRadius: 20, border: "2px solid rgba(255,255,255,0.6)", background: "rgba(255,255,255,0.12)", padding: 0, overflow: "hidden", cursor: "pointer" }}><img src="./icons/icon-192.png" alt="" width={36} height={36} style={{ width: "100%", height: "100%", display: "block" }} /></button>
+                <button onClick={() => { setNameDraft(ui.name || ""); setNameSheet(true); }} aria-label="Edit your name" style={{ width: 48, height: 48, flex: "0 0 auto", borderRadius: 24, border: "2px solid rgba(255,255,255,0.75)", background: "#d9d6cf", padding: 0, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.4)" }}><img src={PHOTO.avatar} alt="" width={44} height={44} style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} /></button>
               </div>
               <div style={{ height: "calc(min(100vw, 400px) * 0.66 - 64px)" }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 0 }}>
@@ -1651,6 +1653,22 @@ export default function App() {
         </Fragment>
       )}
       </main>
+      {nameSheet && (
+        <div role="dialog" aria-modal="true" aria-label="Your name" onClick={() => setNameSheet(false)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); setUi({ ...ui, name: nameDraft.trim() }); setNameSheet(false); }} style={{ width: "100%", maxWidth: 520, background: "var(--card)", color: "var(--text)", borderRadius: "24px 24px 0 0", padding: "12px 18px calc(env(safe-area-inset-bottom) + 18px)", display: "grid", gap: 14, boxShadow: "0 -8px 30px rgba(0,0,0,0.35)" }}>
+            <div style={{ width: 44, height: 5, borderRadius: 3, background: "var(--border-strong)", margin: "0 auto" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <img src={PHOTO.avatar} alt="" width={56} height={56} style={{ width: 56, height: 56, borderRadius: 28, display: "block" }} />
+              <div><div style={{ fontSize: 20, fontWeight: 800 }}>What should we call you?</div><div style={{ fontSize: 13, color: "var(--text2)" }}>{`Shown on Home as "Hi, ${nameDraft.trim() || "Golfer"}"`}</div></div>
+            </div>
+            <input autoFocus value={nameDraft} maxLength={30} placeholder="Golfer" aria-label="Your name" onChange={(e) => setNameDraft(e.target.value)} style={{ minHeight: 50, fontSize: 17, padding: "0 14px", borderRadius: 14, border: "1px solid var(--border-strong)", background: "var(--elev)", color: "var(--text)" }} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button type="button" onClick={() => setNameSheet(false)} style={{ minHeight: 50, borderRadius: 25, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
+              <button type="submit" style={{ minHeight: 50, borderRadius: 25, border: "none", background: "var(--primary)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>Save</button>
+            </div>
+          </form>
+        </div>
+      )}
       <BottomNav value={nav} onChange={(v) => { setDetail(null); setPlayer(null); if (v === "more" && nav === "more") setTab("menu"); setNav(v); }} />
     </div>
   );
