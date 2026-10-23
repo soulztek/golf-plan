@@ -4,7 +4,7 @@ import {
   LineChart, Columns, CalendarHeatmap, DayView, Metrics, LinkCards, Fragment, useState, useEffect, useMemo, useGrokTheme,
 } from "./kit";
 import { DemoBlock, demoKind, demoThumb } from "./Demo";
-import { BottomNav, Hero, ScreenTitle, StatCard, CategoryCard, WorkoutCard, ExerciseRow, MenuRow, SectionTitle, Chip, Bar, Icon, PHOTO } from "./Shell";
+import { BottomNav, Hero, HeroTitle, ScreenTitle, StatCard, CategoryCard, WorkoutCard, ExerciseRow, MenuRow, SectionTitle, Chip, Bar, Icon, PHOTO, I, IconDot, Tick, CARD, NAV_H, NAV_BOTTOM } from "./Shell";
 import { DEMOS, FEDB_USED } from "./demos.generated";
 
 type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
@@ -610,69 +610,72 @@ function sessionRows(s: Session): string[][] {
   return s.items.map((e) => { const a = t; t += e.min / 60; return [fmtRange(a, t), e.name, `${e.dose}, rest ${e.rest}`, e.load]; });
 }
 
-function TapItem(props: { label: string; done: boolean; onTap: () => void; openLabel?: string; onOpen?: () => void }) {
-  const t = useGrokTheme();
+function TapItem(props: { label: string; done: boolean; onTap: () => void; openLabel?: string; onOpen?: () => void; first?: boolean }) {
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "stretch" }}>
-      <button onClick={props.onTap} style={{ flex: "1 1 220px", minHeight: 58, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${props.done ? t.border.focus : t.border.default}`, background: props.done ? t.fill.accentSubtle : t.bg.elevated, color: t.text.primary, fontFamily: t.font.family, fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight }}>
-        <span style={{ flex: "0 0 auto", width: 28, height: 28, borderRadius: t.radius.md, border: `2px solid ${props.done ? t.fill.controlChecked : t.border.strong}`, background: props.done ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: t.weight.semibold }}>{props.done ? "✓" : ""}</span>
-        <span style={{ textDecoration: props.done ? "line-through" : "none", color: props.done ? t.text.secondary : t.text.primary }}>{props.label}</span>
-      </button>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 54, padding: "8px 0", borderTop: props.first ? "none" : "1px solid var(--border)" }}>
+      <Tick done={props.done} onClick={props.onTap} label={props.done ? `Untick ${props.label}` : `Tick ${props.label}`} size={28} />
+      <button onClick={props.onTap} style={{ flex: 1, minHeight: 38, border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: 15, lineHeight: "20px", color: props.done ? "var(--text3)" : "var(--text)", textDecoration: props.done ? "line-through" : "none", textDecorationColor: "var(--text3)" }}>{props.label}</button>
       {props.onOpen && (
-        <button onClick={props.onOpen} style={{ flex: "0 0 auto", minHeight: 58, padding: "0 16px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${t.border.default}`, background: t.fill.secondary, color: t.text.primary, fontFamily: t.font.family, fontSize: t.font.body2.fontSize, fontWeight: t.weight.medium }}>{props.openLabel || "Open"}</button>
+        <button onClick={props.onOpen} style={{ flex: "0 0 auto", height: 34, padding: "0 14px 0 11px", borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>{I("play", 12)}{props.openLabel === "Start timer" ? "Timer" : props.openLabel || "Open"}</button>
       )}
     </div>
   );
 }
 function TapList(props: { items: { key: CheckKey; label: string; done: boolean }[]; onTap: (k: CheckKey) => void; onOpenMobility?: () => void }) {
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {props.items.map((it) => <TapItem key={it.key} label={it.label} done={it.done} onTap={() => props.onTap(it.key)} openLabel="Start timer" onOpen={it.key === "mobility" ? props.onOpenMobility : undefined} />)}
+    <div style={{ display: "grid", marginTop: -6, marginBottom: -6 }}>
+      {props.items.map((it, i) => <TapItem key={it.key} first={i === 0} label={it.label} done={it.done} onTap={() => props.onTap(it.key)} openLabel="Start timer" onOpen={it.key === "mobility" ? props.onOpenMobility : undefined} />)}
     </div>
   );
 }
 function ProgressBar(props: { value: number; label: string }) {
-  const t = useGrokTheme();
-  const pct = Math.max(0, Math.min(1, props.value));
   return (
-    <div style={{ display: "grid", gap: 6 }}>
-      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{props.label}</div>
-      <div style={{ height: 12, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}><div style={{ width: `${pct * 100}%`, height: "100%", background: t.dataviz.categorical[0], borderRadius: t.radius.full }} /></div>
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ fontSize: 13, color: "var(--text3)" }}>{props.label}</div>
+      <Bar value={props.value} height={6} />
     </div>
   );
 }
 function Rating(props: { label: string; value?: number; onPick: (n: number) => void }) {
-  const t = useGrokTheme();
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{props.label}</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ fontSize: 13, color: "var(--text3)" }}>{props.label}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 4, padding: 4, borderRadius: 16, background: "var(--fill2)" }}>
         {[1, 2, 3, 4, 5].map((n) => { const on = props.value === n; return (
-          <button key={n} onClick={() => props.onPick(n)} style={{ width: 54, height: 50, borderRadius: t.radius.lg, cursor: "pointer", border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.controlChecked : t.bg.elevated, color: on ? t.text.onPrimary : t.text.primary, fontSize: t.font.body1.fontSize, fontWeight: t.weight.semibold }}>{n}</button>
+          <button key={n} onClick={() => props.onPick(n)} aria-pressed={on} style={{ height: 42, borderRadius: 12, cursor: "pointer", border: "none", background: on ? "var(--ink)" : "transparent", color: on ? "var(--on-ink)" : "var(--text2)", fontSize: 16, fontWeight: on ? 600 : 500, fontVariantNumeric: "tabular-nums" }}>{n}</button>
         ); })}
       </div>
     </div>
   );
 }
 function DrillList(props: { drills: Drill[]; done: Record<string, boolean>; onTap: (id: string) => void; showDays: boolean }) {
-  const t = useGrokTheme();
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {props.drills.map((d) => { const on = !!props.done[d.id]; return (
-        <div key={d.id} style={{ display: "grid", gap: 8, padding: 0, borderRadius: t.radius.lg, border: `1px solid ${on ? t.border.focus : t.border.default}`, background: on ? t.fill.accentSubtle : t.bg.elevated }}>
-        <button onClick={() => props.onTap(d.id)} style={{ width: "100%", display: "flex", gap: 14, alignItems: "flex-start", padding: "14px 16px 6px", textAlign: "left", cursor: "pointer", borderRadius: t.radius.lg, border: "none", background: "transparent", color: t.text.primary, fontFamily: t.font.family }}>
-          <span style={{ flex: "0 0 auto", width: 28, height: 28, marginTop: 2, borderRadius: t.radius.md, border: `2px solid ${on ? t.fill.controlChecked : t.border.strong}`, background: on ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: t.weight.semibold }}>{on ? "✓" : ""}</span>
-          <span style={{ display: "grid", gap: 4, minWidth: 0 }}>
-            <span style={{ fontSize: t.font.body1.fontSize, lineHeight: t.font.body1.lineHeight, fontWeight: t.weight.semibold, textDecoration: on ? "line-through" : "none", color: on ? t.text.secondary : t.text.primary }}>{d.name}</span>
-            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.primary }}>{`${d.time} · ${d.reps}`}</span>
-            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{`Cue: ${d.cue}`}</span>
-            <span style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{`Done when: ${d.pass}`}</span>
-            <span style={{ fontSize: t.font.label.fontSize, color: t.text.tertiary }}>{`${props.showDays && d.days.length > 0 ? `${d.days.length === 7 ? "Daily" : d.days.join(", ")} · ` : ""}${d.when}${d.credit ? ` · ${d.credit}` : ""}`}</span>
-          </span>
-        </button>
-        {DEMOS[d.id] && <div style={{ padding: "0 12px 12px 54px" }}><DemoBlock id={d.id} /></div>}
+        <div key={d.id} style={{ display: "grid", gap: 10, padding: 14, borderRadius: 18, background: on ? "var(--accent-subtle)" : "var(--bg)" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <Tick done={on} onClick={() => props.onTap(d.id)} label={on ? `Untick ${d.name}` : `Tick ${d.name}`} size={28} />
+            <button onClick={() => props.onTap(d.id)} style={{ flex: 1, display: "grid", gap: 4, border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", color: "var(--text)" }}>
+              <span style={{ fontSize: 15, lineHeight: "20px", fontWeight: 600, paddingTop: 4, color: on ? "var(--text3)" : "var(--text)" }}>{d.name}</span>
+              <span style={{ display: "flex", gap: 8, alignItems: "flex-start", margin: "2px 0" }}><Chip icon={I("clock", 13)} label={d.time} /><span style={{ fontSize: 13, lineHeight: "18px", color: "var(--text)", paddingTop: 5 }}>{d.reps}</span></span>
+              <span style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{d.cue}</span>
+              <span style={{ fontSize: 13, lineHeight: "18px", color: "var(--text3)" }}>{`Done when: ${d.pass}`}</span>
+              <span style={{ fontSize: 12, color: "var(--text3)" }}>{`${props.showDays && d.days.length > 0 ? `${d.days.length === 7 ? "Daily" : d.days.join(", ")} · ` : ""}${d.when}${d.credit ? ` · ${d.credit}` : ""}`}</span>
+            </button>
+          </div>
+          {DEMOS[d.id] && <div style={{ paddingLeft: 40 }}><DemoBlock id={d.id} /></div>}
         </div>
       ); })}
+    </div>
+  );
+}
+function GoalText(props: { text: string }) {
+  const [open, setOpen] = useState<boolean>(false);
+  const long = props.text.length > 150;
+  return (
+    <div style={{ fontSize: 14, lineHeight: "20px", color: "var(--text2)" }}>
+      <div className={long && !open ? "clamp3" : undefined}>{props.text}</div>
+      {long && <button onClick={() => setOpen(!open)} style={{ border: "none", background: "transparent", padding: "4px 0 0", color: "var(--text)", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>{open ? "Show less" : "Read more"}</button>}
     </div>
   );
 }
@@ -710,31 +713,33 @@ function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; on
     phase = `${m.rounds} x ${m.reps || ""}${sideTxt}`;
   }
   const doneN = moves.filter((x) => props.done[x.id]).length;
-  const btn = (primary: boolean) => ({ minHeight: 54, padding: "0 20px", flex: "1 1 120px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${primary ? t.fill.primary : t.border.default}`, background: primary ? t.fill.primary : t.bg.elevated, color: primary ? t.text.onPrimary : t.text.primary, fontSize: t.font.body1.fontSize, fontWeight: t.weight.semibold });
+  const btn = (primary: boolean) => ({ minHeight: 48, padding: "0 16px", flex: primary ? "1 1 100%" : "1 1 0", cursor: "pointer", borderRadius: 999, border: "none", background: primary ? "var(--ink)" : "var(--card)", color: primary ? "var(--on-ink)" : "var(--text)", fontSize: 14.5, fontWeight: 600, whiteSpace: "nowrap" as any });
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ border: `1px solid ${t.border.default}`, borderRadius: t.radius.xl, padding: 18, display: "grid", gap: 10, background: t.bg.elevated }}>
-        <div style={{ fontSize: t.font.label.fontSize, color: t.text.tertiary }}>{`Move ${idx + 1} of ${moves.length} · ${m.area}`}</div>
-        <div style={{ fontSize: t.font.heading2.fontSize, lineHeight: t.font.heading2.lineHeight, fontWeight: t.weight.semibold }}>{m.name}</div>
-        <div style={{ fontSize: t.font.body1.fontSize }}>{doseOf(m)}</div>
-        <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{m.cue}</div>
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ borderRadius: 20, padding: 16, display: "grid", gap: 10, background: "var(--bg)" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><Chip label={`Move ${idx + 1} of ${moves.length}`} tone="ink" /><Chip label={m.area} /></div>
+        <div style={{ fontSize: 20, lineHeight: "26px", fontWeight: 600, letterSpacing: -0.3 }}>{m.name}</div>
+        <div style={{ fontSize: 14, color: "var(--text)" }}>{doseOf(m)}</div>
+        <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{m.cue}</div>
         {DEMOS[m.id] && <DemoBlock key={m.id} id={m.id} />}
-        <div style={{ fontSize: 56, lineHeight: "64px", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: t.text.link }}>{mmss(left)}</div>
-        <div style={{ fontSize: t.font.body2.fontSize, color: t.text.secondary }}>{phase}</div>
-        <div style={{ height: 8, borderRadius: t.radius.full, background: t.fill.secondary, overflow: "hidden" }}><div style={{ width: `${m.secs > 0 ? (elapsed / m.secs) * 100 : 0}%`, height: "100%", background: t.dataviz.categorical[0] }} /></div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "grid", gap: 2, marginTop: 4 }}>
+          <div style={{ fontSize: 52, lineHeight: "58px", fontWeight: 600, letterSpacing: -1.5, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>{mmss(left)}</div>
+          <div style={{ fontSize: 13, color: "var(--text3)" }}>{phase}</div>
+        </div>
+        <Bar value={m.secs > 0 ? elapsed / m.secs : 0} height={6} track="var(--border)" />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           <button style={btn(true)} onClick={() => setRunning(!running)}>{running ? "Pause" : left < m.secs ? "Resume" : "Start"}</button>
           <button style={btn(false)} onClick={finish}>Done, next</button>
           <button style={btn(false)} onClick={() => go(idx - 1)}>Back</button>
-          <button style={btn(false)} onClick={() => go(idx)}>Restart move</button>
+          <button style={btn(false)} onClick={() => go(idx)}>Restart</button>
         </div>
       </div>
-      <div style={{ fontSize: t.font.label.fontSize, color: t.text.secondary }}>{`${doneN} of ${moves.length} moves done. Tap a move to jump to it; tap the box to tick it. Keep the screen on while the timer runs.`}</div>
-      <div style={{ display: "grid", gap: 8 }}>
-        {moves.map((x, i) => { const d = !!props.done[x.id]; return (
-          <div key={x.id} style={{ display: "flex", gap: 8 }}>
-            <button onClick={() => props.onSet(x.id, !d)} style={{ width: 50, minHeight: 50, cursor: "pointer", borderRadius: t.radius.lg, border: `2px solid ${d ? t.fill.controlChecked : t.border.strong}`, background: d ? t.fill.controlChecked : "transparent", color: t.text.onPrimary, fontSize: 18, fontWeight: t.weight.semibold }}>{d ? "✓" : ""}</button>
-            <button onClick={() => go(i)} style={{ flex: "1 1 200px", minHeight: 50, textAlign: "left", padding: "8px 14px", cursor: "pointer", borderRadius: t.radius.lg, border: `1px solid ${i === idx ? t.border.focus : t.border.default}`, background: i === idx ? t.fill.accentSubtle : t.bg.elevated, color: d ? t.text.secondary : t.text.primary, fontSize: t.font.body2.fontSize }}>{`${x.name} · ${doseOf(x)}`}</button>
+      <div style={{ fontSize: 12.5, lineHeight: "17px", color: "var(--text3)" }}>{`${doneN} of ${moves.length} moves done. Tap a move to jump to it, or the circle to tick it. Keep the screen on while the timer runs.`}</div>
+      <div style={{ display: "grid", marginTop: -4 }}>
+        {moves.map((x, i) => { const d = !!props.done[x.id]; const cur = i === idx; return (
+          <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 8px", margin: "0 -8px", borderRadius: 14, background: cur ? "var(--accent-subtle)" : "transparent" }}>
+            <Tick done={d} onClick={() => props.onSet(x.id, !d)} label={d ? `Untick ${x.name}` : `Tick ${x.name}`} size={26} />
+            <button onClick={() => go(i)} style={{ flex: 1, minHeight: 40, textAlign: "left", padding: 0, cursor: "pointer", border: "none", background: "transparent", color: d ? "var(--text3)" : "var(--text)", fontSize: 14, lineHeight: "19px" }}>{x.name}<span style={{ color: "var(--text3)" }}>{` · ${doseOf(x)}`}</span></button>
           </div>
         ); })}
       </div>
@@ -771,12 +776,12 @@ function BackupBox(props: { store: Store; onImport: (s: Store) => void }) {
   };
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <button onClick={doExport} style={{ minHeight: 52, borderRadius: t.radius.lg, border: `1px solid ${t.fill.primary}`, background: t.fill.primary, color: "#fff", fontSize: 16, fontWeight: 650, cursor: "pointer" }}>Export backup (JSON)</button>
-      <label style={{ minHeight: 52, borderRadius: t.radius.lg, border: `1px solid ${t.border.strong}`, background: t.bg.elevated, color: t.text.primary, fontSize: 16, fontWeight: 650, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+      <button onClick={doExport} style={{ minHeight: 50, borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Export backup (JSON)</button>
+      <label style={{ minHeight: 50, borderRadius: 999, border: "none", background: "var(--fill2)", color: t.text.primary, fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
         Import backup
         <input type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => { doImport(e.target.files ? e.target.files[0] : undefined); e.target.value = ""; }} />
       </label>
-      {msg && <div style={{ fontSize: 14, color: t.text.link }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 13.5, color: t.text.link }}>{msg}</div>}
     </div>
   );
 }
@@ -807,24 +812,24 @@ function WedgeCounter(props: { rec: WedgeRec; canSwitch: boolean; onShot: (i: nu
   const shots = props.rec.shots.reduce((a, b) => a + b, 0);
   const total = L.targets.length * L.shots;
   const nextIdx = L.targets.findIndex((_y, i) => (props.rec.shots[i] || 0) < L.shots);
-  const small = (bg: string, fg: string) => ({ minHeight: 48, minWidth: 72, padding: "0 12px", borderRadius: 12, border: `1px solid ${t.border.default}`, background: bg, color: fg, fontSize: 16, fontWeight: 700, cursor: "pointer" });
+  const small = (bg: string, fg: string) => ({ height: 42, minWidth: 64, padding: "0 14px", borderRadius: 999, border: "none", background: bg, color: fg, fontSize: 14.5, fontWeight: 600, cursor: "pointer" });
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 15 }}>{`Ladder ${props.rec.ladder}: ${L.targets.length} targets x ${L.shots} shots`}</div>
-        <div style={{ fontSize: 22, fontWeight: 700 }}>{`${hits}/${shots}${shots ? ` · ${Math.round((hits / shots) * 100)}%` : ""}`}</div>
+        <div style={{ fontSize: 13.5, color: "var(--text3)" }}>{`Ladder ${props.rec.ladder} · ${L.targets.length} targets × ${L.shots} shots`}</div>
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.4, fontVariantNumeric: "tabular-nums" }}>{`${hits}/${shots}${shots ? ` · ${Math.round((hits / shots) * 100)}%` : ""}`}</div>
       </div>
       <ProgressBar value={shots / total} label={`${shots} of ${total} shots${nextIdx >= 0 ? ` · next: ${L.targets[nextIdx]} yd (hit ${winOf(L.targets[nextIdx])})` : " · all done"}`} />
       {L.targets.map((y, i) => {
         const sh = props.rec.shots[i] || 0; const h = props.rec.hits[i] || 0; const full = sh >= L.shots; const cur = i === nextIdx;
         return (
-          <div key={y} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 14, border: `1px solid ${cur ? t.border.focus : t.border.default}`, background: cur ? t.fill.accentSubtle : t.bg.elevated, opacity: full && !cur ? 0.75 : 1 }}>
+          <div key={y} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 10px 10px 14px", borderRadius: 16, background: cur ? "var(--accent-subtle)" : "var(--bg)", opacity: full && !cur ? 0.6 : 1 }}>
             <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{`${y} yd`}</div>
-              <div style={{ fontSize: 13, color: t.text.secondary }}>{`Hit = ${winOf(y)} yd carry · ${h} hits · ${sh}/${L.shots} shots`}</div>
+              <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{`${y} yd`}</div>
+              <div style={{ fontSize: 12, color: t.text.tertiary }}>{`Hit = ${winOf(y)} yd carry · ${h} hits · ${sh}/${L.shots} shots`}</div>
             </div>
-            <button aria-label={`Hit at ${y} yards`} disabled={full} onClick={() => props.onShot(i, true)} style={{ ...small(full ? t.fill.secondary : t.fill.primary, "#fff"), opacity: full ? 0.5 : 1 }}>Hit</button>
-            <button aria-label={`Miss at ${y} yards`} disabled={full} onClick={() => props.onShot(i, false)} style={{ ...small(t.bg.elevated, t.text.primary), opacity: full ? 0.5 : 1 }}>Miss</button>
+            <button aria-label={`Hit at ${y} yards`} disabled={full} onClick={() => props.onShot(i, true)} style={{ ...small("var(--ink)", "var(--on-ink)"), opacity: full ? 0.35 : 1 }}>Hit</button>
+            <button aria-label={`Miss at ${y} yards`} disabled={full} onClick={() => props.onShot(i, false)} style={{ ...small("var(--card)", t.text.primary), opacity: full ? 0.35 : 1 }}>Miss</button>
           </div>
         );
       })}
@@ -832,7 +837,7 @@ function WedgeCounter(props: { rec: WedgeRec; canSwitch: boolean; onShot: (i: nu
         <Button label="Undo last shot" onClick={props.onUndo} />
         {props.canSwitch && <Button label={`Switch to Ladder ${props.rec.ladder === "A" ? "B" : "A"}`} onClick={props.onSwitch} />}
       </div>
-      <Button variant="primary" label={props.rec.done ? "Session saved ✓ (tap to re-save)" : "Finish + save session"} onClick={props.onFinish} />
+      <Button variant="primary" label={props.rec.done ? "Session saved · tap to re-save" : "Finish + save session"} onClick={props.onFinish} />
     </div>
   );
 }
@@ -844,6 +849,7 @@ const GOLF_KEYS: CheckKey[] = ["wedges", "putting", "sim", "eighteen", "nine"];
 const TRAIN_KEYS: CheckKey[] = ["mobility", "hipmini", "strength", "speed", "hips", "wedges", "putting", "sim", "eighteen", "nine", "recovery"];
 const UI_KEY = "golf-speed-plan-ui";
 const DAILY_ACCENT = "#f5b800";
+const DAILY_INK = "#e5ab00";
 const HOME_BG = "#131315";
 const HOME_VARS: any = { "--bg": HOME_BG, "--card": "#1d1e22", "--elev": "#1d1e22", "--fill2": "#26282e", "--border": "#2c2e35", "--border-strong": "#4d515b", "--text": "#f1f3f6", "--text2": "#adb3bd", "--text3": "#80868f", "--glass": "rgba(24,25,30,0.72)", "--nav": "rgba(16,16,19,0.94)", "--shadow": "0 6px 22px rgba(0,0,0,0.45)", "--accent-subtle": "rgba(92,201,138,0.14)", "--zebra": "rgba(255,255,255,0.03)", "--link": "#8fe0b0", colorScheme: "dark" };
 const DEMO_RULES: [RegExp, string][] = [
@@ -864,15 +870,15 @@ const SWAPS: Omit<Session, "start"> = {
   items: DRILLS.filter((d) => d.id.startsWith("swap_")).map((d) => ({ name: d.name.replace("Swap option: ", ""), dose: d.reps, rest: "-", load: d.cue, min: 2, demo: d.id } as any)),
 };
 const WORKOUTS: Workout[] = [
-  { id: "tests", title: "Testing Day tests", sub: "Speed, jumps, throws, hamstring retest", s: TESTS_AM, days: [], key: "speed", fallback: "📏", testing: true, when: "Testing Day, 6:30 AM" },
-  { id: "strA", title: "Strength A", sub: "Power primer, trap bar, bench, hamstrings", s: STRENGTH_A, days: ["Tue"], key: "strength", fallback: "🏋️", when: "Tue 6:32 AM" },
-  { id: "strB", title: "Strength B", sub: "Upper + rotational power, moderate legs", s: STRENGTH_B, days: ["Thu"], key: "strength", fallback: "💪", when: "Thu 6:32 AM" },
-  { id: "stack", title: "TheStack speed", sub: "Speed session + Rapsodo transfer", s: SPEED, days: ["Mon", "Wed", "Sat"], key: "speed", fallback: "⚡", when: "Mon/Wed/Sat 6:34 AM" },
-  { id: "hipmini", title: "Daily hip mini-block", sub: "4 min after the morning routine", s: HIP_MINI, days: ALL7, key: "hipmini", fallback: "🦵", when: "Every day, 6:30 (6:28 Tue/Thu)" },
-  { id: "hipblock", title: "Hip block", sub: "10 min after TheStack", s: HIP_BLOCK, days: ["Wed", "Sat"], key: "hips", fallback: "🌀", when: "Wed/Sat 7:04 AM" },
-  { id: "primer", title: "Pre-round hip primer", sub: "4 min before the round", s: HIP_PRIMER, days: ["Mon", "Fri"], key: "hips", fallback: "⛳", when: "Mon 1:00 PM, Fri 3:05 PM" },
-  { id: "ham", title: "Hamstring add-on", sub: "Optional, after the hip block", s: HAM_SAT, days: ["Sat"], fallback: "🦿", optional: true, when: "Sat 7:14 AM (optional)" },
-  { id: "swaps", title: "Kneel-jump swaps", sub: "Swap if knees/landing feel off", s: SWAPS, days: ["Thu"], fallback: "🔁", optional: true, when: "Thu, in place of the kneeling jump" },
+  { id: "tests", title: "Testing Day tests", sub: "Speed, jumps, throws, hamstring retest", s: TESTS_AM, days: [], key: "speed", fallback: "ruler", testing: true, when: "Testing Day, 6:30 AM" },
+  { id: "strA", title: "Strength A", sub: "Power primer, trap bar, bench, hamstrings", s: STRENGTH_A, days: ["Tue"], key: "strength", fallback: "workout", when: "Tue 6:32 AM" },
+  { id: "strB", title: "Strength B", sub: "Upper + rotational power, moderate legs", s: STRENGTH_B, days: ["Thu"], key: "strength", fallback: "workout", when: "Thu 6:32 AM" },
+  { id: "stack", title: "TheStack speed", sub: "Speed session + Rapsodo transfer", s: SPEED, days: ["Mon", "Wed", "Sat"], key: "speed", fallback: "gauge", when: "Mon/Wed/Sat 6:34 AM" },
+  { id: "hipmini", title: "Daily hip mini-block", sub: "4 min after the morning routine", s: HIP_MINI, days: ALL7, key: "hipmini", fallback: "layers", when: "Every day, 6:30 (6:28 Tue/Thu)" },
+  { id: "hipblock", title: "Hip block", sub: "10 min after TheStack", s: HIP_BLOCK, days: ["Wed", "Sat"], key: "hips", fallback: "layers", when: "Wed/Sat 7:04 AM" },
+  { id: "primer", title: "Pre-round hip primer", sub: "4 min before the round", s: HIP_PRIMER, days: ["Mon", "Fri"], key: "hips", fallback: "golf", when: "Mon 1:00 PM, Fri 3:05 PM" },
+  { id: "ham", title: "Hamstring add-on", sub: "Optional, after the hip block", s: HAM_SAT, days: ["Sat"], fallback: "layers", optional: true, when: "Sat 7:14 AM (optional)" },
+  { id: "swaps", title: "Kneel-jump swaps", sub: "Swap if knees/landing feel off", s: SWAPS, days: ["Thu"], fallback: "trend", optional: true, when: "Thu, in place of the kneeling jump" },
 ];
 function loadUi(): { name?: string; dark?: boolean } { try { return JSON.parse(window.localStorage.getItem(UI_KEY) || "{}"); } catch (_e) { return {}; } }
 
@@ -911,7 +917,7 @@ export default function App() {
     try { window.localStorage.setItem(STORE_KEY, JSON.stringify(store)); setSaved(true); } catch (_e) { setSaved(false); }
   }, [store]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab, nav, detail]);
-  useEffect(() => { try { window.localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_e) {} document.documentElement.setAttribute("data-theme", ui.dark ? "dark" : "light"); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", nav === "home" ? HOME_BG : ui.dark ? "#0b1510" : "#f3f6f9"); document.body.style.background = nav === "home" ? HOME_BG : ""; }, [ui, nav]);
+  useEffect(() => { try { window.localStorage.setItem(UI_KEY, JSON.stringify(ui)); } catch (_e) {} document.documentElement.setAttribute("data-theme", ui.dark ? "dark" : "light"); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", nav === "home" || nav === "daily" ? HOME_BG : ui.dark ? "#0e100f" : "#f4f6f5"); document.body.style.background = ""; }, [ui, nav]);
   const go = (where: string) => { setDetail(null); setPlayer(null); if (where === "stretch") { setNav("daily"); window.setTimeout(() => { const el = document.getElementById("timer"); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 120); } else if (["home", "daily", "workout", "golf"].indexOf(where) >= 0) setNav(where); else { setNav("more"); setTab(where); } };
 
   const todayIso = iso(now);
@@ -1074,50 +1080,58 @@ export default function App() {
   const moreTitles: Record<string, string> = { plan: "Weekly plan", phases: "12 weeks", log: "Log + backup", assess: "Tests", food: "Food", drills: "Drills + how-to", settings: "Settings", today: "Full day view" };
 
   return (
-    <div style={{ ...(nav === "home" ? HOME_VARS : {}), minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
-      <main style={{ ...(nav === "daily" ? { "--primary": "#d9a300" } : {}), maxWidth: 760, margin: "0 auto", padding: "0 14px calc(env(safe-area-inset-bottom) + 96px)", display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 14 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
+      <main key={nav + (detail || "") + tab} className="fadein" style={{ ...(nav === "daily" ? { "--accent": DAILY_INK, "--on-accent": "#111312", "--accent-subtle": "rgba(245,184,0,0.14)" } : {}), maxWidth: 760, margin: "0 auto", padding: `0 16px calc(${NAV_BOTTOM} + ${NAV_H + 28}px)`, display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 12 }}>
       {nav === "home" && (
         <Fragment>
-          <div style={{ position: "relative", margin: "0 -14px", background: HOME_BG, minHeight: "calc(min(100vw, 400px) * 1.782)", overflow: "hidden" }}>
+          <div style={{ position: "relative", margin: "0 -16px", background: HOME_BG, height: "calc(min(100vw, 400px) * 1.70)", overflow: "hidden" }}>
             <img src={PHOTO.dontSleep} alt="Don't sleep. Jalen Brunson, number 11, hand raised" width={335} height={597} style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "min(100vw, 400px)", height: "auto", display: "block" }} />
-            <div aria-hidden style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, ${HOME_BG} 0%, rgba(19,19,21,0) calc(50% - 200px), rgba(19,19,21,0) calc(50% + 200px), ${HOME_BG} 100%), linear-gradient(180deg, rgba(19,19,21,0) 0%, rgba(19,19,21,0) 62%, rgba(19,19,21,0.55) 80%, ${HOME_BG} 100%)` }} />
-            <div style={{ position: "relative", padding: "calc(env(safe-area-inset-top) + 12px) 16px 18px", color: "#f1f3f6" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div aria-hidden style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, ${HOME_BG} 0%, rgba(19,19,21,0) calc(50% - 200px), rgba(19,19,21,0) calc(50% + 200px), ${HOME_BG} 100%), linear-gradient(180deg, rgba(19,19,21,0.55) 0%, rgba(19,19,21,0) 16%, rgba(19,19,21,0) 58%, rgba(19,19,21,0.75) 86%, ${HOME_BG} 100%)` }} />
+            <div style={{ position: "relative", height: "100%", padding: "calc(env(safe-area-inset-top) + 14px) 20px 44px", color: "#fff", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.75 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>{`Hi, ${ui.name || "Golfer"}`}<span style={{ fontSize: 13, fontWeight: 500, opacity: 0.75 }}> · Let's check your activity</span></div>
+                  <div style={{ fontSize: 24, fontWeight: 600, letterSpacing: -0.4, lineHeight: "30px" }}>{`Hi, ${ui.name || "Golfer"}`}</div>
+                  <div style={{ fontSize: 13, opacity: 0.7, marginTop: 1 }}>{`${greetWord} · ${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()]} ${shortDate(todayIso)}`}</div>
                 </div>
-                <button onClick={() => { setNameDraft(ui.name || ""); setNameSheet(true); }} aria-label="Edit your name" style={{ width: 48, height: 48, flex: "0 0 auto", borderRadius: 24, border: "2px solid rgba(255,255,255,0.75)", background: "#d9d6cf", padding: 0, overflow: "hidden", cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.4)" }}><img src={PHOTO.avatar} alt="" width={44} height={44} style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} /></button>
+                <button onClick={() => { setNameDraft(ui.name || ""); setNameSheet(true); }} aria-label="Edit your name" style={{ width: 48, height: 48, flex: "0 0 auto", borderRadius: 24, border: "2px solid rgba(255,255,255,0.9)", background: "#d9d6cf", padding: 0, overflow: "hidden", cursor: "pointer" }}><img src={PHOTO.avatar} alt="" width={44} height={44} style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} /></button>
               </div>
-              <div style={{ height: "calc(min(100vw, 400px) * 0.66 - 64px)" }} />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 0 }}>
-                <StatCard big emoji="✅" label="Today" value={`${dayPct}%`} detail={`${doneCount} of ${items.length} tasks done`} onClick={() => go(upNext ? catOf(upNext.key) : "daily")} />
-                <StatCard emoji="🔥" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
-                <StatCard emoji="⏱️" label="Time spent" value={`${minutesDone}`} unit={`of ${minutesPlanned} min`} />
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit={`mph · goal 110 (${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} to go)`} onClick={() => go("golf")} />
-                <div style={{ marginTop: 8 }}><Bar value={(lastSpeed - 90) / 20} color="#f1f3f6" track="rgba(255,255,255,0.18)" /></div>
-              </div>
+              <button onClick={() => go(upNext ? catOf(upNext.key) : "daily")} style={{ marginTop: "auto", alignSelf: "flex-start", border: "none", background: "transparent", padding: 0, color: "#fff", textAlign: "left", cursor: "pointer", width: 170 }}>
+                <div style={{ fontSize: 13, opacity: 0.7 }}>Today</div>
+                <div style={{ fontSize: 48, fontWeight: 600, letterSpacing: -1.5, lineHeight: "54px", fontVariantNumeric: "tabular-nums" }}>{`${dayPct}%`}</div>
+                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 10 }}>{`${doneCount} of ${items.length} tasks done`}</div>
+                <Bar value={doneCount / Math.max(1, items.length)} color="#ffffff" track="rgba(255,255,255,0.22)" />
+              </button>
             </div>
           </div>
-          {upNext ? (
-            <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ display: "flex", alignItems: "center", gap: 14, padding: 16, border: "none", borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)", marginTop: -6, position: "relative", zIndex: 2 }}>
-              <span aria-hidden style={{ fontSize: 28 }}>🎯</span>
-              <span style={{ flex: 1 }}>
-                <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: 0.6 }}>{`Up next${upNext.b ? ` · ${fmtHour(upNext.b.s)}` : ""}`}</span>
-                <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{upNext.label}</span>
-              </span>
-              <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
-            </button>
-          ) : (
-            <div style={{ padding: 16, borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", marginTop: -6, position: "relative", zIndex: 2, fontWeight: 700 }}>🎉 Everything done today. Nice work.</div>
-          )}
-          <SectionTitle>Today by category</SectionTitle>
-          <div className="hscroll" style={{ margin: "0 -14px", padding: "2px 14px 8px" }}>
-            <CategoryCard title="Daily" emoji="☀️" color="#0b0b0b" ink={DAILY_ACCENT} lines={[`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} tasks`, "Mobility, hips, sleep, food"]} value={fracOf(dailyItems)} onClick={() => go("daily")} />
-            <CategoryCard title="Workout" emoji="🏋️" color="#f2a93b" photo={PHOTO.bunker} lines={[workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"}` : "Rest from training", todayWorkouts.filter((w) => !w.optional).map((w) => w.title).join(" · ") || "Mobility only"]} value={workItems.length ? fracOf(workItems) : 1} onClick={() => go("workout")} />
-            <CategoryCard title="Golf" emoji="⛳" color="#2f7fd8" photo={PHOTO.range} lines={[golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} ${golfItems.length === 1 ? "session" : "sessions"}` : "No golf today", plan.focus]} value={golfItems.length ? fracOf(golfItems) : 1} onClick={() => go("golf")} />
+          <div style={{ marginTop: -36, position: "relative", zIndex: 2, display: "grid", gap: 12 }}>
+            {upNext ? (
+              <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ ...CARD, display: "flex", alignItems: "center", gap: 14, padding: 16, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+                <IconDot name="target" tone="ink" size={42} />
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: "block", fontSize: 12.5, color: "var(--text3)" }}>{`Up next${upNext.b ? ` · ${fmtHour(upNext.b.s)}` : ""}`}</span>
+                  <span style={{ display: "block", fontSize: 15.5, fontWeight: 600, lineHeight: "21px", marginTop: 1 }}>{upNext.label}</span>
+                </span>
+                <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
+              </button>
+            ) : (
+              <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 14, padding: 16 }}><IconDot name="check" tone="accent" size={42} /><span style={{ fontSize: 15.5, fontWeight: 600 }}>Everything done today. Nice work.</span></div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <StatCard icon="flame" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
+              <StatCard icon="timer" label="Time spent" value={`${minutesDone}`} unit={`/ ${minutesPlanned} min`} detail="Training today" />
+            </div>
+            <StatCard icon="gauge" label="Swing speed" value={`${lastSpeed}`} unit="mph" onClick={() => go("golf")}>
+              <div style={{ display: "grid", gap: 8 }}>
+                <Bar value={(lastSpeed - 90) / 20} height={6} />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text3)" }}><span>90</span><span>{`${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} mph to goal`}</span><span>110</span></div>
+              </div>
+            </StatCard>
+          </div>
+          <SectionTitle>Today</SectionTitle>
+          <div className="hscroll" style={{ margin: "-4px -16px 0", padding: "4px 16px 10px", scrollPaddingLeft: 16 }}>
+            <CategoryCard title="Daily" photo={PHOTO.daily} photoPos="50% 22%" photoBg="#000" meta={`${dailyItems.filter((i) => i.done).length}/${dailyItems.length}`} lines={["Mobility, hips, sleep, food"]} value={fracOf(dailyItems)} ink={DAILY_INK} onClick={() => go("daily")} />
+            <CategoryCard title="Workout" photo={PHOTO.bunker} photoPos="50% 40%" meta={workItems.length ? `${workItems.filter((i) => i.done).length}/${workItems.length}` : "Rest"} lines={[todayWorkouts.filter((w) => !w.optional).map((w) => w.title).join(" · ") || "Mobility only"]} value={workItems.length ? fracOf(workItems) : 1} onClick={() => go("workout")} />
+            <CategoryCard title="Golf" photo={PHOTO.range} photoPos="40% 40%" meta={golfItems.length ? `${golfItems.filter((i) => i.done).length}/${golfItems.length}` : "Off"} lines={[golfItems.length ? plan.focus : "No golf today"]} value={golfItems.length ? fracOf(golfItems) : 1} onClick={() => go("golf")} />
           </div>
           <Section heading={`Right now · ${todayKey} ${fmtHour(hourNow)}`} collapsible defaultOpen={false}>
             <Properties items={[
@@ -1166,13 +1180,16 @@ export default function App() {
 
       {nav === "daily" && (
         <Fragment>
-          <div style={{ margin: "0 -14px", padding: "calc(env(safe-area-inset-top) + 10px) 16px 14px", borderRadius: "0 0 24px 24px", background: "#000", color: DAILY_ACCENT, display: "flex", alignItems: "center", gap: 14 }}>
-            <img src={PHOTO.daily} alt="Quote: You are allowed to think about the worst possible scenario. But then you got to go out there and do something about it. Jalen Brunson" width={389} height={514} style={{ display: "block", height: 210, width: "auto", aspectRatio: "389 / 514", flex: "0 0 auto", borderRadius: 10 }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 28, fontWeight: 800, lineHeight: "32px" }}>Daily</div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", margin: "4px 0 12px" }}>Mobility, hips, sleep, food</div>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>{`${dailyItems.filter((i) => i.done).length} of ${dailyItems.length} done`}</div>
-              <Bar value={fracOf(dailyItems)} color={DAILY_ACCENT} track="rgba(255,255,255,0.18)" />
+          <div style={{ margin: "0 -16px", padding: "calc(env(safe-area-inset-top) + 12px) 20px 20px", borderRadius: "0 0 28px 28px", background: "#000", color: "#fff", display: "flex", alignItems: "flex-end", gap: 18 }}>
+            <img src={PHOTO.daily} alt="Quote: You are allowed to think about the worst possible scenario. But then you got to go out there and do something about it. Jalen Brunson" width={389} height={514} style={{ display: "block", height: 210, width: "auto", aspectRatio: "389 / 514", flex: "0 0 auto", borderRadius: 14 }} />
+            <div style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.5, lineHeight: "34px" }}>Daily</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", margin: "2px 0 18px" }}>Mobility, hips, sleep, food</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 30, fontWeight: 600, letterSpacing: -0.8, color: DAILY_ACCENT, fontVariantNumeric: "tabular-nums" }}>{`${dailyItems.filter((i) => i.done).length}/${dailyItems.length}`}</span>
+                <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>done</span>
+              </div>
+              <Bar value={fracOf(dailyItems)} color={DAILY_ACCENT} track="rgba(255,255,255,0.16)" />
             </div>
           </div>
           {isTestingDay && (
@@ -1188,7 +1205,7 @@ export default function App() {
           <div id="timer" style={{ scrollMarginTop: 12 }} />
 
           <Section heading="Pick a routine">
-            <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily 18 min (lift day)" : "Daily 20 min" }, { value: "warmup", label: "Warm-up 5 min" }, { value: "sunday", label: "Sunday 26 min" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
+            <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily · 18 min" : "Daily · 20 min" }, { value: "warmup", label: "Warm-up · 5" }, { value: "sunday", label: "Sunday · 26" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
             <Text>{`${ROUTINES[effRoutine].when}. Total ${mmss(routineSecs(effRoutine))}. Press Start; the timer moves through each move by itself, shows which side to do, and buzzes (Android) at each change.`}</Text>
           </Section>
           {(effRoutine === "daily" || effRoutine === "dailylift") && (
@@ -1212,7 +1229,7 @@ export default function App() {
             <Section heading={`Sunday long stretch · ${fmtRange(ROUTINES.sunday.start, ROUTINES.sunday.start + routineSecs("sunday") / 3600)}`}><Table columns={["Time", "Stretch", "Rounds x hold", "Cue"]} rows={stretchRows("sunday", ROUTINES.sunday.start)} /></Section>
             <Text>Block 1 opens the range, block 2 builds strength in it, block 3 uses it at speed. Holds are seconds per side unless marked; back off if anything pinches.</Text>
           </Section>
-                  <Section heading="Energy, focus, notes">
+          <Section heading="Energy, focus, notes">
             <Rating label="Energy (1 low, 5 high)" value={rec.energy} onPick={(n) => updateToday({ energy: n })} />
             <Rating label="Focus (1 low, 5 high)" value={rec.focus} onPick={(n) => updateToday({ focus: n })} />
             <Input label="One line about today" value={rec.notes || ""} placeholder="Sore back, great wedges, slept badly..." onChange={(v) => updateToday({ notes: v })} />
@@ -1227,46 +1244,43 @@ export default function App() {
             </Section>
           )}
 
-          <MenuRow emoji="🥗" title="Food + water guide" sub="Protein, water, meal timing" onClick={() => go("food")} />
+          <MenuRow icon="food" title="Food + water guide" sub="Protein, water, meal timing" onClick={() => go("food")} />
           {!store.startDate && <Button label="Start week 1 today" onClick={() => setStore((st) => ({ ...st, startDate: todayIso }))} />}
         </Fragment>
       )}
 
       {nav === "workout" && !curW && (
         <Fragment>
-          <Hero photo={PHOTO.bunker} height={230} position="50% 40%" fade={false}>
-            <div style={{ marginTop: "auto" }}>
-              <div style={{ fontSize: 30, fontWeight: 800, textShadow: "0 1px 8px rgba(0,0,0,0.3)" }}>Workouts</div>
-              <div style={{ fontSize: 14 }}>{workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"} done today` : "No main session today: mobility and hips only"}</div>
-            </div>
+          <Hero photo={PHOTO.bunker} height={240} position="50% 40%" fade={false}>
+            <HeroTitle title="Workouts" sub={workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"} done today` : "No main session today: mobility and hips only"} />
           </Hero>
           {workItems.length > 0 && <Section heading="Today's sessions"><TapList items={workItems} onTap={toggle} /></Section>}
           <SectionTitle>Today</SectionTitle>
-          {todayWorkouts.map((w) => { const n = w.s.items.length; const d = wDoneN(w); return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : "Today"} lines={[`${n} exercises`, `${Math.round(sessMin(w.s as any))} minutes · ${w.when}`]} value={d / n} progressLabel={`${d}/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
+          {todayWorkouts.map((w) => { const n = w.s.items.length; const d = wDoneN(w); return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : undefined} chips={[`${Math.round(sessMin(w.s as any))} min`, `${n} exercises`]} lines={[w.when]} value={d / n} progressLabel={`${d}/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
           <SectionTitle>All workouts</SectionTitle>
-          {otherWorkouts.map((w) => { const n = w.s.items.length; return <WorkoutCard key={w.id} title={w.title} lines={[`${n} exercises`, `${Math.round(sessMin(w.s as any))} minutes · ${w.when}`]} value={0} progressLabel={w.sub} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
+          {otherWorkouts.map((w) => { const n = w.s.items.length; return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : undefined} chips={[`${Math.round(sessMin(w.s as any))} min`, `${n} exercises`]} lines={[w.when]} value={0} progressLabel={`0/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
           {workDrillsToday.length > 0 && (
             <Section heading={`Today's power + hip drills · ${workDrillsToday.filter((d) => drillDone[d.id]).length} of ${workDrillsToday.length}`} caption="Same drills as inside the sessions, with cues and finish lines." collapsible defaultOpen={false}>
               <DrillList drills={workDrillsToday} done={drillDone} onTap={toggleDrill} showDays={false} />
             </Section>
           )}
-          <MenuRow emoji="📚" title="All drills + how-to demos" sub="Power, hips, golf, scores" onClick={() => go("drills")} />
+          <MenuRow icon="book" title="All drills + how-to demos" sub="Power, hips, golf, scores" onClick={() => go("drills")} />
         </Fragment>
       )}
 
       {nav === "workout" && curW && (() => { const w = curW; const n = w.s.items.length; const d = wDoneN(w); const pi = player; const pe = pi !== null ? w.s.items[pi] : null; return (
         <Fragment>
-          <Hero photo={pi !== null && demoThumb(demoFor(pe)) ? demoThumb(demoFor(pe)) : wThumb(w) || PHOTO.bunker} height={260} position="center" onBack={() => { if (player !== null) setPlayer(null); else setDetail(null); }} />
-          <div style={{ marginTop: -36, position: "relative", zIndex: 2, background: "var(--bg)", borderRadius: "28px 28px 0 0", padding: "10px 2px 0", display: "grid", gap: 12 }}>
-            <div style={{ width: 44, height: 5, borderRadius: 3, background: "var(--border-strong)", margin: "0 auto" }} />
-            <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: -0.3 }}>{w.title}</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Chip icon={Icon.clock} label={`${Math.round(sessMin(w.s as any))} min`} />
-              <Chip icon={Icon.list} label={`${n} exercises`} />
-              <Chip label={w.when} tone="rgba(47,127,216,0.12)" />
-              {d > 0 && <Chip icon={Icon.check} label={`${d}/${n} done`} />}
+          <Hero photo={pi !== null && demoThumb(demoFor(pe)) ? demoThumb(demoFor(pe)) : wThumb(w) || PHOTO.bunker} height={280} position="center" onBack={() => { if (player !== null) setPlayer(null); else setDetail(null); }} />
+          <div style={{ position: "relative", zIndex: 2, background: "var(--bg)", borderRadius: "28px 28px 0 0", margin: "-40px -16px 0", padding: "12px 16px 0", display: "grid", gap: 12 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border-strong)", margin: "0 auto 2px" }} />
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, lineHeight: "32px" }}>{w.title}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: -2 }}>
+              <Chip icon={I("clock", 13)} label={`${Math.round(sessMin(w.s as any))} min`} tone="accent" />
+              <Chip icon={I("list", 13)} label={`${n} exercises`} tone="accent" />
+              <Chip icon={I("calendar", 13)} label={w.when} />
+              {d > 0 && <Chip icon={I("check", 13, 2.5)} label={`${d}/${n} done`} tone="ink" />}
             </div>
-            {pi === null && <Text>{w.s.goal}</Text>}
+            {pi === null && <GoalText text={w.s.goal} />}
             {pi !== null && pe && (
               <Section heading={`Exercise ${pi + 1} of ${n}: ${pe.name}`}>
                 <Properties items={[{ label: "Sets x reps", value: pe.dose }, { label: "Rest", value: pe.rest }, { label: "Load + cues", value: pe.load }]} />
@@ -1280,7 +1294,7 @@ export default function App() {
             )}
             {w.s.items.map((e, i) => { const id = demoFor(e); return (
               <Fragment key={i}>
-                <ExerciseRow title={e.name} sub={`${e.dose}${e.rest && e.rest !== "-" ? ` · rest ${e.rest}` : ""} · ${e.min} min`} done={wRowDone(w, i)} active={pi === i || openEx === i} thumb={demoThumb(id)} fallback={id && DEMOS[id] ? "▶️" : w.fallback} onTap={() => setRow(w, i, !wRowDone(w, i))} onOpen={() => setOpenEx(openEx === i ? null : i)} />
+                <ExerciseRow title={e.name} sub={`${e.dose}${e.rest && e.rest !== "-" ? ` · rest ${e.rest}` : ""} · ${e.min} min`} done={wRowDone(w, i)} active={pi === i || openEx === i} thumb={demoThumb(id)} fallback={id && DEMOS[id] ? "play" : w.fallback} onTap={() => setRow(w, i, !wRowDone(w, i))} onOpen={() => setOpenEx(openEx === i ? null : i)} />
                 {openEx === i && pi === null && (
                   <div style={{ display: "grid", gap: 8, padding: "2px 6px 8px" }}>
                     <Text>{e.load}</Text>
@@ -1291,11 +1305,11 @@ export default function App() {
             ); })}
             {w.id === "strA" || w.id === "strB" ? <Callout tone="warning">Warm up first, stop 2 reps short of failure, flat back on every hinge, no pain.</Callout> : null}
             {w.id.startsWith("hip") || w.id === "primer" ? <Callout tone="warning">{HIP_SAFETY}</Callout> : null}
-            <div style={{ height: 70 }} />
+            <div style={{ height: 76 }} />
           </div>
           {pi === null && (
-            <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(env(safe-area-inset-bottom) + 70px)", zIndex: 40, padding: "0 16px" }}>
-              <button onClick={() => { const f = w.s.items.findIndex((_e, i) => !wRowDone(w, i)); setPlayer(f < 0 ? 0 : f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ display: "block", width: "100%", maxWidth: 728, margin: "0 auto", minHeight: 58, borderRadius: 29, border: "none", background: "var(--primary)", color: "#fff", fontSize: 18, fontWeight: 800, boxShadow: "0 10px 24px rgba(47,158,92,0.35)", cursor: "pointer" }}>{d === 0 ? "Start" : d < n ? "Continue" : "Start again"}</button>
+            <div style={{ position: "fixed", left: 0, right: 0, bottom: `calc(${NAV_BOTTOM} + ${NAV_H + 10}px)`, zIndex: 40, padding: "0 24px", pointerEvents: "none" }}>
+              <button onClick={() => { const f = w.s.items.findIndex((_e, i) => !wRowDone(w, i)); setPlayer(f < 0 ? 0 : f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ pointerEvents: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", maxWidth: 420, margin: "0 auto", minHeight: 54, borderRadius: 27, border: "none", background: "var(--accent)", color: "#fff", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 24px rgba(30,158,98,0.32)", cursor: "pointer" }}>{I("play", 14)}{d === 0 ? "Start" : d < n ? "Continue" : "Start again"}</button>
             </div>
           )}
         </Fragment>
@@ -1304,14 +1318,11 @@ export default function App() {
       {nav === "golf" && (
         <Fragment>
           <Hero photo={PHOTO.range} height={240} position="40% 40%" fade={false}>
-            <div style={{ marginTop: "auto" }}>
-              <div style={{ fontSize: 30, fontWeight: 800, textShadow: "0 1px 8px rgba(0,0,0,0.3)" }}>Golf</div>
-              <div style={{ fontSize: 14 }}>{golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} golf sessions done today` : "No golf session today"}</div>
-            </div>
+            <HeroTitle title="Golf" sub={golfItems.length ? `${golfItems.filter((i) => i.done).length} of ${golfItems.length} golf sessions done today` : "No golf session today"} />
           </Hero>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <StatCard emoji="🏌️" label="Swing speed" value={`${lastSpeed}`} unit="mph" detail={`Best ${bestSpeed || lastSpeed} · goal 110`} />
-            <StatCard emoji="🎯" label="Wedge hits" value={wedgeHist.length ? `${wPct(wedgeHist[wedgeHist.length - 1])}%` : "-"} detail={wedgeHist.length ? `Last: Ladder ${wedgeHist[wedgeHist.length - 1].ladder}` : `Next: Ladder ${nextLadder}`} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <StatCard icon="gauge" label="Swing speed" value={`${lastSpeed}`} unit="mph" detail={`Best ${bestSpeed || lastSpeed} · goal 110`} />
+            <StatCard icon="target" label="Wedge hits" value={wedgeHist.length ? `${wPct(wedgeHist[wedgeHist.length - 1])}%` : "-"} detail={wedgeHist.length ? `Last: Ladder ${wedgeHist[wedgeHist.length - 1].ladder}` : `Next: Ladder ${nextLadder}`} />
           </div>
           {golfItems.length > 0 && <Section heading="Today's golf"><TapList items={golfItems} onTap={toggle} /></Section>}
           {plan.checks.indexOf("wedges") >= 0 && (
@@ -1356,23 +1367,23 @@ export default function App() {
           <Section heading="Weekly golf" collapsible defaultOpen={false}>
             <Rows rows={ALL7.map((k) => { const pk = planFor(todayIso, k); const g = pk.checks.filter((c) => GOLF_KEYS.indexOf(c) >= 0); return { lead: k, title: g.length ? g.map((c) => labelFor(pk, c)).join(" · ") : "No golf", detail: pk.focus }; })} />
           </Section>
-          <MenuRow emoji="📈" title="Full log" sub="Speed, scores, wedge sessions, backup" onClick={() => go("log")} />
-          <MenuRow emoji="📚" title="Golf drills + how-to" sub="Wedges, putting, sim" onClick={() => go("drills")} />
+          <MenuRow icon="trend" title="Full log" sub="Speed, scores, wedge sessions, backup" onClick={() => go("log")} />
+          <MenuRow icon="book" title="Golf drills + how-to" sub="Wedges, putting, sim" onClick={() => go("drills")} />
         </Fragment>
       )}
 
       {nav === "more" && tab === "menu" && (
         <Fragment>
           <ScreenTitle title="More" sub="Plan, history, tests and settings" />
-          <MenuRow emoji="🗓️" title="Weekly plan" sub="Every day, minute by minute" onClick={() => setTab("plan")} />
-          <MenuRow emoji="📈" title="12 weeks" sub="Phases + progression rules" onClick={() => setTab("phases")} />
-          <MenuRow emoji="📝" title="Log + backup" sub="Speed, lifts, scores, wedges, export/import, credits" onClick={() => setTab("log")} />
-          <MenuRow emoji="📏" title="Tests" sub="Testing Days + mobility screens" onClick={() => setTab("assess")} />
-          <MenuRow emoji="🥗" title="Food" sub="Protein, water, meal timing" onClick={() => setTab("food")} />
-          <MenuRow emoji="📚" title="Drills + how-to" sub="All drills, demos, scores" onClick={() => setTab("drills")} />
-          <MenuRow emoji="🕒" title="Full day view" sub="Right now, timeline, full checklist" onClick={() => setTab("today")} />
-          <MenuRow emoji="⚙️" title="Settings" sub="Your name, dark mode" onClick={() => setTab("settings")} />
-          <MenuRow emoji="©️" title="Credits + licenses" sub="Demo images and videos" onClick={() => setTab("log")} />
+          <MenuRow icon="calendar" title="Weekly plan" sub="Every day, minute by minute" onClick={() => setTab("plan")} />
+          <MenuRow icon="trend" title="12 weeks" sub="Phases + progression rules" onClick={() => setTab("phases")} />
+          <MenuRow icon="note" title="Log + backup" sub="Speed, lifts, scores, wedges, export/import, credits" onClick={() => setTab("log")} />
+          <MenuRow icon="ruler" title="Tests" sub="Testing Days + mobility screens" onClick={() => setTab("assess")} />
+          <MenuRow icon="food" title="Food" sub="Protein, water, meal timing" onClick={() => setTab("food")} />
+          <MenuRow icon="book" title="Drills + how-to" sub="All drills, demos, scores" onClick={() => setTab("drills")} />
+          <MenuRow icon="clock" title="Full day view" sub="Right now, timeline, full checklist" onClick={() => setTab("today")} />
+          <MenuRow icon="settings" title="Settings" sub="Your name, dark mode" onClick={() => setTab("settings")} />
+          <MenuRow icon="info" title="Credits + licenses" sub="Demo images and videos" onClick={() => setTab("log")} />
         </Fragment>
       )}
       {nav === "more" && tab !== "menu" && <ScreenTitle title={moreTitles[tab] || "More"} onBack={() => setTab("menu")} />}
@@ -1382,7 +1393,7 @@ export default function App() {
             <Input label="Shown on Home as 'Hi, ...'" value={ui.name || ""} placeholder="Golfer" onChange={(v) => setUi({ ...ui, name: v })} />
           </Section>
           <Section heading="Appearance">
-            <Segmented<string> options={[{ value: "light", label: "☀️ Light" }, { value: "dark", label: "🌙 Dark" }]} value={ui.dark ? "dark" : "light"} onChange={(v) => setUi({ ...ui, dark: v === "dark" })} />
+            <Segmented<string> options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} value={ui.dark ? "dark" : "light"} onChange={(v) => setUi({ ...ui, dark: v === "dark" })} />
           </Section>
           <Section heading="About">
             <Text>Your plan data stays on this phone (Log + backup to export). Name and theme are stored separately and never touch your check-ins.</Text>
@@ -1655,16 +1666,16 @@ export default function App() {
       </main>
       {nameSheet && (
         <div role="dialog" aria-modal="true" aria-label="Your name" onClick={() => setNameSheet(false)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); setUi({ ...ui, name: nameDraft.trim() }); setNameSheet(false); }} style={{ width: "100%", maxWidth: 520, background: "var(--card)", color: "var(--text)", borderRadius: "24px 24px 0 0", padding: "12px 18px calc(env(safe-area-inset-bottom) + 18px)", display: "grid", gap: 14, boxShadow: "0 -8px 30px rgba(0,0,0,0.35)" }}>
-            <div style={{ width: 44, height: 5, borderRadius: 3, background: "var(--border-strong)", margin: "0 auto" }} />
+          <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); setUi({ ...ui, name: nameDraft.trim() }); setNameSheet(false); }} style={{ width: "100%", maxWidth: 520, background: "var(--card)", color: "var(--text)", borderRadius: "28px 28px 0 0", padding: "12px 20px calc(env(safe-area-inset-bottom) + 20px)", display: "grid", gap: 16, boxShadow: "0 -8px 30px rgba(0,0,0,0.2)" }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border-strong)", margin: "0 auto" }} />
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <img src={PHOTO.avatar} alt="" width={56} height={56} style={{ width: 56, height: 56, borderRadius: 28, display: "block" }} />
-              <div><div style={{ fontSize: 20, fontWeight: 800 }}>What should we call you?</div><div style={{ fontSize: 13, color: "var(--text2)" }}>{`Shown on Home as "Hi, ${nameDraft.trim() || "Golfer"}"`}</div></div>
+              <div><div style={{ fontSize: 19, fontWeight: 600, letterSpacing: -0.3 }}>What should we call you?</div><div style={{ fontSize: 13, color: "var(--text3)" }}>{`Shown on Home as "Hi, ${nameDraft.trim() || "Golfer"}"`}</div></div>
             </div>
-            <input autoFocus value={nameDraft} maxLength={30} placeholder="Golfer" aria-label="Your name" onChange={(e) => setNameDraft(e.target.value)} style={{ minHeight: 50, fontSize: 17, padding: "0 14px", borderRadius: 14, border: "1px solid var(--border-strong)", background: "var(--elev)", color: "var(--text)" }} />
+            <input autoFocus value={nameDraft} maxLength={30} placeholder="Golfer" aria-label="Your name" onChange={(e) => setNameDraft(e.target.value)} style={{ minHeight: 50, fontSize: 17, padding: "0 16px", borderRadius: 14, border: "none", background: "var(--fill2)", color: "var(--text)" }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <button type="button" onClick={() => setNameSheet(false)} style={{ minHeight: 50, borderRadius: 25, border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text)", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Cancel</button>
-              <button type="submit" style={{ minHeight: 50, borderRadius: 25, border: "none", background: "var(--primary)", color: "#fff", fontSize: 16, fontWeight: 800, cursor: "pointer" }}>Save</button>
+              <button type="button" onClick={() => setNameSheet(false)} style={{ minHeight: 50, borderRadius: 25, border: "none", background: "var(--fill2)", color: "var(--text)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+              <button type="submit" style={{ minHeight: 50, borderRadius: 25, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Save</button>
             </div>
           </form>
         </div>

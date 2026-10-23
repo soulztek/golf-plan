@@ -3,33 +3,68 @@ import React, { ReactNode } from "react";
 const BASE = (import.meta as any).env.BASE_URL || "./";
 export const PHOTO = { home: BASE + "photos/home.webp", bunker: BASE + "photos/bunker.webp", range: BASE + "photos/range.webp", daily: BASE + "photos/daily.webp", dontSleep: BASE + "photos/home-dontsleep.webp", avatar: BASE + "photos/avatar.webp" };
 
-const P = { stroke: "currentColor", strokeWidth: 2, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" } as any;
-export const Icon = {
-  home: <svg width="24" height="24" viewBox="0 0 24 24" {...P}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20h14V9.5" /><path d="M10 20v-6h4v6" /></svg>,
-  daily: <svg width="24" height="24" viewBox="0 0 24 24" {...P}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>,
-  workout: <svg width="24" height="24" viewBox="0 0 24 24" {...P}><path d="M6 7v10M18 7v10M3 9.5v5M21 9.5v5M6 12h12" /></svg>,
-  golf: <svg width="24" height="24" viewBox="0 0 24 24" {...P}><path d="M8 21V3l9 4-9 4" /><ellipse cx="12" cy="20.5" rx="7" ry="1.5" /></svg>,
-  more: <svg width="24" height="24" viewBox="0 0 24 24" {...P}><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>,
-  back: <svg width="22" height="22" viewBox="0 0 24 24" {...P}><path d="M15 5l-7 7 7 7" /></svg>,
-  chev: <svg width="20" height="20" viewBox="0 0 24 24" {...P}><path d="M9 5l7 7-7 7" /></svg>,
-  clock: <svg width="16" height="16" viewBox="0 0 24 24" {...P}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
-  list: <svg width="16" height="16" viewBox="0 0 24 24" {...P}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>,
-  play: <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>,
-  check: <svg width="16" height="16" viewBox="0 0 24 24" {...P} strokeWidth={3}><path d="M5 12l5 5L20 7" /></svg>,
+// ---------- Design tokens (shared by every screen) ----------
+export const S = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 }; // spacing scale
+export const R = { card: 22, inner: 14, pill: 999 };                   // radius scale
+export const F = { cap: 12, meta: 13, body: 15, title: 17, h2: 22, h1: 28, big: 40 }; // type scale
+export const CARD: any = { background: "var(--card)", borderRadius: R.card, boxShadow: "var(--shadow)", border: "none" };
+
+// ---------- Inline line icons (Lucide-style, 24 grid, stroke 1.75) ----------
+const PATHS: Record<string, ReactNode> = {
+  home: <><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></>,
+  daily: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /><path d="m9 16 2 2 4-4" /></>,
+  workout: <><rect x="5" y="6" width="3.5" height="12" rx="1.25" /><rect x="15.5" y="6" width="3.5" height="12" rx="1.25" /><path d="M2.5 9.5v5" /><path d="M21.5 9.5v5" /><path d="M8.5 12h7" /></>,
+  golf: <><path d="M8 18V2.5l9 4.25L8 11" /><path d="M3.5 19.5c0 1.1 3.8 2 8.5 2s8.5-.9 8.5-2-3.8-2-8.5-2" /></>,
+  more: <><rect width="7" height="7" x="3" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="3" rx="1.5" /><rect width="7" height="7" x="14" y="14" rx="1.5" /><rect width="7" height="7" x="3" y="14" rx="1.5" /></>,
+  back: <path d="m15 18-6-6 6-6" />,
+  chev: <path d="m9 18 6-6-6-6" />,
+  down: <path d="m6 9 6 6 6-6" />,
+  clock: <><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>,
+  list: <><path d="M3 12h.01" /><path d="M3 18h.01" /><path d="M3 6h.01" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M8 6h13" /></>,
+  check: <path d="M20 6 9 17l-5-5" />,
+  play: <path d="M6 3.5v17l14-8.5z" />,
+  flame: <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />,
+  timer: <><path d="M10 2h4" /><path d="M12 14l3-3" /><circle cx="12" cy="14" r="8" /></>,
+  gauge: <><path d="m12 14 4-4" /><path d="M3.34 19a10 10 0 1 1 17.32 0" /></>,
+  target: <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>,
+  calendar: <><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></>,
+  trend: <><path d="M22 7 13.5 15.5 8.5 10.5 2 17" /><path d="M16 7h6v6" /></>,
+  note: <><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><path d="M10 9H8" /><path d="M16 13H8" /><path d="M16 17H8" /></>,
+  ruler: <><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" /><path d="m14.5 12.5 2-2" /><path d="m11.5 9.5 2-2" /><path d="m8.5 6.5 2-2" /><path d="m17.5 15.5 2-2" /></>,
+  food: <><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" /><path d="M7 2v20" /><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" /></>,
+  book: <><path d="M12 7v14" /><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" /></>,
+  settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></>,
+  info: <><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></>,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></>,
+  layers: <><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></>,
+};
+export function I(name: string, size = 20, stroke = 1.75) {
+  const fill = name === "play" ? "currentColor" : "none";
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={name === "play" ? 0 : stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "block", flex: "0 0 auto" }}>{PATHS[name]}</svg>;
+}
+export const Icon: any = {
+  home: I("home", 22), daily: I("daily", 22), workout: I("workout", 22), golf: I("golf", 22), more: I("more", 22),
+  back: I("back", 22, 2), chev: I("chev", 18, 2), clock: I("clock", 15), list: I("list", 15), play: I("play", 16), check: I("check", 15, 2.5),
 };
 
+// ---------- Floating bottom nav ----------
 export type NavKey = "home" | "daily" | "workout" | "golf" | "more";
+export const NAV_H = 64;
+/** CSS bottom offset of the floating nav: just above the home indicator. */
+export const NAV_BOTTOM = "max(12px, env(safe-area-inset-bottom))";
 export function BottomNav(props: { value: NavKey; onChange: (v: NavKey) => void; badges?: Partial<Record<NavKey, string>> }) {
   const items: { k: NavKey; label: string }[] = [{ k: "home", label: "Home" }, { k: "daily", label: "Daily" }, { k: "workout", label: "Workout" }, { k: "golf", label: "Golf" }, { k: "more", label: "More" }];
+  const idx = Math.max(0, items.findIndex((x) => x.k === props.value));
   return (
-    <nav aria-label="Main" style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 50, background: "var(--nav)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", borderTop: "1px solid var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}>
-      <div style={{ maxWidth: 760, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(5,1fr)" }}>
+    <nav aria-label="Main" style={{ position: "fixed", left: 12, right: 12, bottom: NAV_BOTTOM, zIndex: 50, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <div style={{ pointerEvents: "auto", position: "relative", width: "100%", maxWidth: 440, height: NAV_H, padding: 6, borderRadius: 24, background: "var(--nav)", boxShadow: "0 10px 30px rgba(0,0,0,0.22), 0 2px 6px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255,255,255,0.07)", display: "grid", gridTemplateColumns: "repeat(5,1fr)" }}>
+        <span aria-hidden style={{ position: "absolute", top: 6, bottom: 6, left: 6, width: "calc((100% - 12px) / 5)", borderRadius: 18, background: "rgba(255,255,255,0.10)", transform: `translateX(${idx * 100}%)`, transition: "transform .32s cubic-bezier(.3,.7,.2,1)" }} />
         {items.map((it) => { const on = it.k === props.value; const b = props.badges && props.badges[it.k]; return (
-          <button key={it.k} onClick={() => props.onChange(it.k)} aria-current={on ? "page" : undefined}
-            style={{ minHeight: 62, border: "none", background: "transparent", color: on ? "var(--primary)" : "var(--text3)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", fontSize: 11.5, fontWeight: on ? 700 : 500, position: "relative" }}>
-            <span style={{ display: "flex", padding: "3px 14px", borderRadius: 999, background: on ? "var(--accent-subtle)" : "transparent" }}>{Icon[it.k]}</span>
-            {it.label}
-            {b && <span style={{ position: "absolute", top: 6, right: "50%", marginRight: -24, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 9, background: "var(--blue)", color: "#fff", fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{b}</span>}
+          <button key={it.k} onClick={() => props.onChange(it.k)} aria-current={on ? "page" : undefined} aria-label={it.label}
+            style={{ position: "relative", zIndex: 1, border: "none", background: "transparent", borderRadius: 18, color: on ? "#ffffff" : "#8b908d", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, cursor: "pointer", fontSize: 10.5, fontWeight: on ? 600 : 500, letterSpacing: 0.1, padding: 0 }}>
+            <span style={{ display: "flex", transition: "transform .25s ease", transform: on ? "translateY(-1px)" : "none" }}>{I(it.k, 21)}</span>
+            <span>{it.label}</span>
+            {b && <span style={{ position: "absolute", top: 4, right: "50%", marginRight: -18, minWidth: 16, height: 16, padding: "0 4px", borderRadius: 8, background: "var(--accent)", color: "#fff", fontSize: 10, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center" }}>{b}</span>}
           </button>
         ); })}
       </div>
@@ -37,112 +72,145 @@ export function BottomNav(props: { value: NavKey; onChange: (v: NavKey) => void;
   );
 }
 
-/** Photo hero with gradient overlay that fades into the page background. */
-export function Hero(props: { photo: string; height?: number | string; position?: string; children?: ReactNode; onBack?: () => void; fade?: boolean }) {
+/** Photo hero, full-bleed with rounded bottom corners. */
+export function Hero(props: { photo: string; height?: number | string; position?: string; children?: ReactNode; onBack?: () => void; fade?: boolean; contain?: boolean }) {
   return (
-    <div style={{ position: "relative", margin: "0 -14px", minHeight: props.height || 260, backgroundImage: `url(${props.photo})`, backgroundSize: "cover", backgroundPosition: props.position || "center", borderRadius: "0 0 28px 28px", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, background: props.fade === false ? "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.55) 100%)" : "linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.0) 30%, rgba(0,0,0,0.0) 55%, rgba(0,0,0,0.55) 100%)" }} />
-      {props.onBack && <button onClick={props.onBack} aria-label="Back" style={{ position: "absolute", zIndex: 2, top: "calc(env(safe-area-inset-top) + 10px)", left: 12, width: 44, height: 44, borderRadius: 22, border: "none", background: "rgba(255,255,255,0.88)", color: "#16212b", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{Icon.back}</button>}
-      <div style={{ position: "relative", zIndex: 1, minHeight: props.height || 260, padding: "calc(env(safe-area-inset-top) + 14px) 18px 18px", display: "flex", flexDirection: "column", color: "#fff" }}>{props.children}</div>
+    <div style={{ position: "relative", margin: "0 -16px", minHeight: props.height || 260, backgroundColor: props.contain ? "#fff" : "#1a1c1b", backgroundImage: `url(${props.photo})`, backgroundSize: props.contain ? "contain" : "cover", backgroundRepeat: "no-repeat", backgroundPosition: props.position || "center", borderRadius: "0 0 28px 28px", overflow: "hidden" }}>
+      {!props.contain && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0) 32%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.6) 100%)" }} />}
+      {props.onBack && <button onClick={props.onBack} aria-label="Back" style={{ position: "absolute", zIndex: 2, top: "calc(env(safe-area-inset-top) + 12px)", left: 16, width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.92)", color: "#111312", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 10px rgba(0,0,0,0.12)" }}>{Icon.back}</button>}
+      <div style={{ position: "relative", zIndex: 1, minHeight: props.height || 260, padding: "calc(env(safe-area-inset-top) + 16px) 20px 22px", display: "flex", flexDirection: "column", color: "#fff" }}>{props.children}</div>
+    </div>
+  );
+}
+
+export function HeroTitle(props: { title: string; sub?: string }) {
+  return (
+    <div style={{ marginTop: "auto" }}>
+      <div style={{ fontSize: F.h1, fontWeight: 700, letterSpacing: -0.5, lineHeight: "34px" }}>{props.title}</div>
+      {props.sub && <div style={{ fontSize: F.meta, opacity: 0.85, marginTop: 2 }}>{props.sub}</div>}
     </div>
   );
 }
 
 export function ScreenTitle(props: { title: string; sub?: string; onBack?: () => void; right?: ReactNode }) {
   return (
-    <div style={{ padding: "calc(env(safe-area-inset-top) + 14px) 2px 4px", display: "flex", alignItems: "center", gap: 10 }}>
-      {props.onBack && <button onClick={props.onBack} aria-label="Back" style={{ width: 44, height: 44, borderRadius: 22, border: "1px solid var(--border)", background: "var(--card)", color: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flex: "0 0 auto" }}>{Icon.back}</button>}
+    <div style={{ padding: "calc(env(safe-area-inset-top) + 16px) 0 4px", display: "flex", alignItems: "center", gap: 12 }}>
+      {props.onBack && <button onClick={props.onBack} aria-label="Back" style={{ width: 40, height: 40, borderRadius: 20, border: "none", background: "var(--card)", boxShadow: "var(--shadow)", color: "var(--text)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flex: "0 0 auto" }}>{Icon.back}</button>}
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: -0.4, lineHeight: "34px" }}>{props.title}</div>
-        {props.sub && <div style={{ fontSize: 14, color: "var(--text2)" }}>{props.sub}</div>}
+        <div style={{ fontSize: F.h1, fontWeight: 700, letterSpacing: -0.5, lineHeight: "34px" }}>{props.title}</div>
+        {props.sub && <div style={{ fontSize: F.meta, color: "var(--text3)", marginTop: 2 }}>{props.sub}</div>}
       </div>
       {props.right}
     </div>
   );
 }
 
-export function StatCard(props: { emoji: string; label: string; value: string; unit?: string; detail?: string; big?: boolean; onClick?: () => void }) {
+/** Small round icon badge. */
+export function IconDot(props: { name: string; tone?: "accent" | "ink" | "soft"; size?: number }) {
+  const s = props.size || 36;
+  const bg = props.tone === "ink" ? "var(--ink)" : props.tone === "accent" ? "var(--accent-subtle)" : "var(--fill2)";
+  const fg = props.tone === "ink" ? "var(--on-ink)" : props.tone === "accent" ? "var(--accent)" : "var(--text)";
+  return <span aria-hidden style={{ width: s, height: s, borderRadius: s / 2, background: bg, color: fg, display: "flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}>{I(props.name, Math.round(s * 0.5))}</span>;
+}
+
+export function StatCard(props: { icon?: string; emoji?: string; label: string; value: string; unit?: string; detail?: string; big?: boolean; onClick?: () => void; children?: ReactNode }) {
   return (
-    <button onClick={props.onClick} style={{ textAlign: "left", border: "none", cursor: props.onClick ? "pointer" : "default", background: "var(--glass)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", borderRadius: 20, padding: "12px 14px", boxShadow: "var(--shadow)", color: "var(--text)", display: "grid", gap: 4, gridRow: props.big ? "span 2" : undefined, alignContent: props.big ? "space-between" : "start" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 600 }}><span aria-hidden style={{ fontSize: 18 }}>{props.emoji}</span>{props.label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, justifyContent: props.big ? "center" : "flex-start" }}>
-        <span style={{ fontSize: props.big ? 44 : 26, fontWeight: 800, letterSpacing: -0.5 }}>{props.value}</span>
-        {props.unit && <span style={{ fontSize: 13, color: "var(--text2)" }}>{props.unit}</span>}
+    <button onClick={props.onClick} style={{ ...CARD, textAlign: "left", cursor: props.onClick ? "pointer" : "default", padding: 16, color: "var(--text)", display: "grid", gap: 10, alignContent: "start" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: F.meta, color: "var(--text2)", fontWeight: 500 }}>{props.icon && <IconDot name={props.icon} size={28} />}{props.label}</div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: "wrap" }}>
+        <span style={{ fontSize: F.h2 + 4, fontWeight: 600, letterSpacing: -0.6, lineHeight: "30px", fontVariantNumeric: "tabular-nums" }}>{props.value}</span>
+        {props.unit && <span style={{ fontSize: F.meta, color: "var(--text3)" }}>{props.unit}</span>}
       </div>
-      {props.detail && <div style={{ fontSize: 12, color: "var(--text2)", textAlign: props.big ? "center" : "left" }}>{props.detail}</div>}
+      {props.detail && <div style={{ fontSize: F.cap, color: "var(--text3)", marginTop: -6 }}>{props.detail}</div>}
+      {props.children}
     </button>
   );
 }
 
 export function Bar(props: { value: number; color?: string; height?: number; track?: string }) {
   const v = Math.max(0, Math.min(1, props.value || 0));
-  return <div style={{ height: props.height || 6, borderRadius: 99, background: props.track || "var(--fill2)", overflow: "hidden" }}><div style={{ width: `${v * 100}%`, height: "100%", borderRadius: 99, background: props.color || "var(--primary)" }} /></div>;
+  return <div style={{ height: props.height || 4, borderRadius: 99, background: props.track || "var(--fill2)", overflow: "hidden" }}><div style={{ width: `${v * 100}%`, height: "100%", borderRadius: 99, background: props.color || "var(--accent)", transition: "width .4s ease" }} /></div>;
 }
 
-export function CategoryCard(props: { title: string; color: string; lines: string[]; value: number; photo?: string; emoji?: string; ink?: string; onClick: () => void }) {
+export function Chip(props: { icon?: ReactNode; label: string; tone?: "accent" | "soft" | "ink" | string }) {
+  const tone = props.tone || "soft";
+  const bg = tone === "accent" ? "var(--accent-subtle)" : tone === "ink" ? "var(--ink)" : "var(--fill2)";
+  const fg = tone === "accent" ? "var(--link)" : tone === "ink" ? "var(--on-ink)" : "var(--text2)";
+  return <span style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 11px", borderRadius: 999, background: bg, color: fg, fontSize: F.cap, fontWeight: 500, whiteSpace: "nowrap" }}>{props.icon}{props.label}</span>;
+}
+
+export function CategoryCard(props: { title: string; color?: string; lines: string[]; value: number; photo?: string; photoPos?: string; photoBg?: string; meta?: string; ink?: string; emoji?: string; onClick: () => void }) {
   return (
-    <button onClick={props.onClick} style={{ flex: "0 0 74%", maxWidth: 300, minHeight: 150, border: "none", borderRadius: 22, padding: 16, cursor: "pointer", textAlign: "left", color: props.ink || "#fff", position: "relative", overflow: "hidden", background: props.photo ? `linear-gradient(90deg, ${props.color} 0%, ${props.color}e6 45%, ${props.color}33 100%), url(${props.photo}) center/cover` : props.color, boxShadow: "var(--shadow)", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 10 }}>
-      <div>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{props.emoji ? `${props.emoji} ` : ""}{props.title}</div>
-        {props.lines.map((l, i) => <div key={i} style={{ fontSize: 13.5, opacity: 0.95, marginTop: 4 }}>{l}</div>)}
+    <button onClick={props.onClick} style={{ ...CARD, flex: "0 0 68%", maxWidth: 260, padding: 10, cursor: "pointer", textAlign: "left", color: "var(--text)", display: "grid", gap: 10 }}>
+      <div style={{ height: 104, borderRadius: 16, backgroundColor: props.photoBg || "#1a1c1b", backgroundImage: props.photo ? `url(${props.photo})` : undefined, backgroundSize: "cover", backgroundPosition: props.photoPos || "center" }} />
+      <div style={{ padding: "0 6px 6px", display: "grid", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontSize: F.title, fontWeight: 600 }}>{props.title}</span>
+          {props.meta && <span style={{ fontSize: F.cap, color: "var(--text3)", whiteSpace: "nowrap" }}>{props.meta}</span>}
+        </div>
+        {props.lines.map((l, i) => <div key={i} style={{ fontSize: F.meta, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>)}
+        <div style={{ marginTop: 4 }}><Bar value={props.value} color={props.ink} /></div>
       </div>
-      <Bar value={props.value} color={props.ink || "#ffffff"} track="rgba(255,255,255,0.35)" />
     </button>
   );
 }
 
-export function Chip(props: { icon?: ReactNode; label: string; tone?: string }) {
-  return <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, background: props.tone || "var(--accent-subtle)", color: "var(--primary)", fontSize: 13, fontWeight: 600 }}>{props.icon}{props.label}</span>;
-}
-
-function Thumb(props: { src?: string | null; size?: number; fallback?: string }) {
+export function Thumb(props: { src?: string | null; size?: number; fallback?: string; radius?: number }) {
   const s = props.size || 64;
   return props.src
-    ? <img src={props.src} alt="" loading="lazy" decoding="async" width={s} height={s} style={{ width: s, height: s, objectFit: "cover", borderRadius: 14, background: "#fff", flex: "0 0 auto" }} />
-    : <div style={{ width: s, height: s, borderRadius: 14, flex: "0 0 auto", background: "linear-gradient(135deg, var(--accent-subtle), var(--fill2))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: s * 0.42 }}>{props.fallback || "⛳"}</div>;
+    ? <img src={props.src} alt="" loading="lazy" decoding="async" width={s} height={s} style={{ width: s, height: s, objectFit: "cover", borderRadius: props.radius || 14, background: "#fff", flex: "0 0 auto", display: "block" }} />
+    : <div style={{ width: s, height: s, borderRadius: props.radius || 14, flex: "0 0 auto", background: "var(--fill2)", color: "var(--text3)", display: "flex", alignItems: "center", justifyContent: "center" }}>{I(props.fallback || "workout", Math.round(s * 0.36))}</div>;
 }
 
-export function WorkoutCard(props: { title: string; lines: string[]; value: number; progressLabel: string; thumb?: string | null; fallback?: string; badge?: string; onClick: () => void }) {
+export function WorkoutCard(props: { title: string; lines: string[]; chips?: string[]; value: number; progressLabel: string; thumb?: string | null; fallback?: string; badge?: string; onClick: () => void }) {
   return (
-    <button onClick={props.onClick} style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: 14, border: "1px solid var(--border)", borderRadius: 20, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
-      <div style={{ flex: 1, display: "grid", gap: 3 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 18, fontWeight: 700 }}>{props.title}</span>
-          {props.badge && <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "var(--blue)", color: "#fff" }}>{props.badge}</span>}
+    <button onClick={props.onClick} style={{ ...CARD, width: "100%", display: "flex", gap: 14, alignItems: "center", padding: 14, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+      <div style={{ flex: 1, display: "grid", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: F.title, fontWeight: 600, lineHeight: "22px" }}>{props.title}</span>
+          {props.badge && <Chip label={props.badge} tone={props.badge === "Optional" ? "soft" : "accent"} />}
         </div>
-        {props.lines.map((l, i) => <div key={i} style={{ fontSize: 13.5, color: "var(--text2)" }}>{l}</div>)}
-        <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 4 }}>{props.progressLabel}</div>
-        <div style={{ maxWidth: 160 }}><Bar value={props.value} /></div>
+        {props.chips && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{props.chips.map((c, i) => <Chip key={i} icon={i === 0 ? I("clock", 13) : I("list", 13)} label={c} />)}</div>}
+        {props.lines.map((l, i) => <div key={i} style={{ fontSize: F.meta, color: "var(--text3)" }}>{l}</div>)}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, maxWidth: 150 }}><Bar value={props.value} /></div>
+          <span style={{ fontSize: F.cap, color: "var(--text3)", fontVariantNumeric: "tabular-nums" }}>{props.progressLabel}</span>
+        </div>
       </div>
-      <Thumb src={props.thumb} size={96} fallback={props.fallback} />
+      <Thumb src={props.thumb} size={84} fallback={props.fallback} radius={16} />
     </button>
   );
+}
+
+/** Round tick button. */
+export function Tick(props: { done: boolean; onClick: () => void; label: string; size?: number }) {
+  const s = props.size || 30;
+  return <button onClick={props.onClick} aria-label={props.label} aria-pressed={props.done} style={{ width: s, height: s, flex: "0 0 auto", borderRadius: s / 2, border: props.done ? "none" : "1.75px solid var(--border-strong)", background: props.done ? "var(--accent)" : "transparent", color: "var(--on-accent)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 }}>{props.done ? I("check", Math.round(s * 0.52), 2.5) : null}</button>;
 }
 
 export function ExerciseRow(props: { title: string; sub: string; done: boolean; thumb?: string | null; fallback?: string; onTap: () => void; onOpen?: () => void; active?: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 18, border: `1px solid ${props.active ? "var(--focus)" : "var(--border)"}`, background: props.active ? "var(--accent-subtle)" : "var(--card)", boxShadow: "var(--shadow)" }}>
-      <button onClick={props.onOpen || props.onTap} aria-label={`Show ${props.title}`} style={{ border: "none", padding: 0, background: "transparent", cursor: "pointer" }}><Thumb src={props.thumb} size={60} fallback={props.fallback} /></button>
-      <button onClick={props.onOpen || props.onTap} style={{ flex: 1, border: "none", background: "transparent", textAlign: "left", padding: 0, cursor: "pointer", color: "var(--text)", display: "grid", gap: 4 }}>
-        <span style={{ fontSize: 15.5, fontWeight: 700, textDecoration: props.done ? "line-through" : "none", color: props.done ? "var(--text2)" : "var(--text)" }}>{props.title}</span>
-        <span style={{ fontSize: 13, color: "var(--text2)" }}>{props.sub}</span>
-        <Bar value={props.done ? 1 : 0} height={5} />
+    <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, padding: 10, paddingRight: 14, borderRadius: 18, boxShadow: props.active ? "0 0 0 1.5px var(--accent), var(--shadow)" : "var(--shadow)" }}>
+      <button onClick={props.onOpen || props.onTap} aria-label={`Show ${props.title}`} style={{ border: "none", padding: 0, background: "transparent", cursor: "pointer" }}><Thumb src={props.thumb} size={56} fallback={props.fallback} /></button>
+      <button onClick={props.onOpen || props.onTap} style={{ flex: 1, border: "none", background: "transparent", textAlign: "left", padding: 0, cursor: "pointer", color: "var(--text)", display: "grid", gap: 3 }}>
+        <span style={{ fontSize: F.body, fontWeight: 600, lineHeight: "20px", color: props.done ? "var(--text3)" : "var(--text)" }}>{props.title}</span>
+        <span style={{ fontSize: F.meta - 0.5, color: "var(--text3)" }}>{props.sub}</span>
       </button>
-      <button onClick={props.onTap} aria-label={props.done ? `Untick ${props.title}` : `Tick ${props.title}`} style={{ width: 44, height: 44, flex: "0 0 auto", borderRadius: 22, border: `2px solid ${props.done ? "var(--primary)" : "var(--border-strong)"}`, background: props.done ? "var(--primary)" : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{props.done ? Icon.check : null}</button>
+      <Tick done={props.done} onClick={props.onTap} label={props.done ? `Untick ${props.title}` : `Tick ${props.title}`} />
     </div>
   );
 }
 
-export function MenuRow(props: { emoji: string; title: string; sub?: string; onClick: () => void }) {
+export function MenuRow(props: { icon?: string; emoji?: string; title: string; sub?: string; onClick: () => void }) {
   return (
-    <button onClick={props.onClick} style={{ width: "100%", minHeight: 64, display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", border: "1px solid var(--border)", borderRadius: 18, background: "var(--card)", boxShadow: "var(--shadow)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
-      <span aria-hidden style={{ width: 42, height: 42, borderRadius: 14, background: "var(--accent-subtle)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 21, flex: "0 0 auto" }}>{props.emoji}</span>
-      <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{props.title}</span>{props.sub && <span style={{ display: "block", fontSize: 13, color: "var(--text2)" }}>{props.sub}</span>}</span>
+    <button onClick={props.onClick} style={{ ...CARD, borderRadius: 18, width: "100%", minHeight: 64, display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+      <IconDot name={props.icon || "info"} size={38} />
+      <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: F.body, fontWeight: 600 }}>{props.title}</span>{props.sub && <span style={{ display: "block", fontSize: F.meta - 0.5, color: "var(--text3)", marginTop: 1 }}>{props.sub}</span>}</span>
       <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
     </button>
   );
 }
 
 export function SectionTitle(props: { children: ReactNode; action?: ReactNode }) {
-  return <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "6px 2px 0" }}><div style={{ fontSize: 19, fontWeight: 800 }}>{props.children}</div>{props.action}</div>;
+  return <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "10px 2px 0" }}><div style={{ fontSize: F.title + 1, fontWeight: 600, letterSpacing: -0.2 }}>{props.children}</div>{props.action}</div>;
 }
