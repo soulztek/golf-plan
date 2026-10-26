@@ -661,7 +661,7 @@ function MinPanel(props: { title?: string; mode: "full" | "min"; onMode: (m: "fu
       </div>
       {min && props.children}
       {min && (props.done ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--link)", fontWeight: 600 }}>{I("check", 16, 2.5)}{props.minDone ? "Minimum done. That counts. Stop here or keep going." : "Done today."}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--link)", fontWeight: 600 }}>{I("check", 16, 2.5)}{props.minDone ? "Minimum done. That counts." : "Done today."}</div>
       ) : props.onDoneMin ? (
         <button onClick={props.onDoneMin} style={{ minHeight: 48, borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{props.doneLabel || "Done: minimum"}</button>
       ) : null)}
@@ -1331,7 +1331,7 @@ export default function App() {
   };
   // Visible time
   const nextTask = blocks.find((b) => b.s > hourNow && (b.k || b.routine)) || nextBlock;
-  const nextShort = (b: Block) => b.t.split(/\s*[(:]/)[0];
+  const nextShort = (b: Block) => b.t.split(/\s*\(|:\s/)[0];
   const nextChip = nextTask ? <NextChip label={nextShort(nextTask)} mins={(nextTask.s - hourNow) * 60} /> : null;
   const trainToday = plan.checks.filter((k) => TRAIN_KEYS.indexOf(k) >= 0);
   const allTrainDone = trainToday.length > 0 && trainToday.every((k) => !!rec.c[k]);
