@@ -3,9 +3,11 @@ import {
   Page, Section, Text, Callout, BulletList, Steps, Table, Rows, Properties, Segmented, Select, Input, Button,
   LineChart, Columns, CalendarHeatmap, DayView, Metrics, LinkCards, Fragment, useState, useEffect, useMemo, useGrokTheme,
 } from "./kit";
+import { useRef } from "react";
 import { DemoBlock, demoKind, demoThumb } from "./Demo";
 import { BottomNav, Hero, HeroTitle, ScreenTitle, StatCard, CategoryCard, WorkoutCard, ExerciseRow, MenuRow, SectionTitle, Chip, Bar, Icon, PHOTO, I, IconDot, Tick, CARD, NAV_H, NAV_BOTTOM } from "./Shell";
 import { DEMOS, FEDB_USED } from "./demos.generated";
+import { streakInfo, levelOf, LEVELS, MILESTONES, XP, MINIMUMS, MIN_MINUTES, MIN_MOBILITY_IDS, BADGES, BONUS_GAMES, rollReward, rotationBlock, IF_THEN_DEFAULT, EXTRAS, WHY_SOURCES, chime } from "./adhd";
 
 type DayKey = "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun";
 type CheckKey = "wake" | "mobility" | "strength" | "speed" | "wedges" | "putting" | "sim" | "eighteen" | "nine" | "hips" | "hipmini" | "recovery" | "review" | "protein" | "water" | "screens" | "bed";
@@ -23,13 +25,14 @@ interface Session { name: string; key?: CheckKey; start: number; goal: string; i
 type Part = { kind: "stretch"; routine: RoutineKey; start: number } | { kind: "session"; s: Session };
 interface Block { s: number; e: number; t: string; k?: CheckKey; routine?: RoutineKey; }
 interface DayPlan { key: DayKey; focus: string; am: string; pm: string; checks: CheckKey[]; labels: Partial<Record<CheckKey, string>>; parts: Part[]; testing?: boolean; }
-interface DayRec { c: Partial<Record<CheckKey, boolean>>; energy?: number; focus?: number; notes?: string; win?: string; fix?: string; next?: string; stretch?: Record<string, boolean>; drills?: Record<string, boolean>; round?: RoundStats; }
+interface DayRec { c: Partial<Record<CheckKey, boolean>>; min?: Partial<Record<CheckKey, boolean>>; mode?: Partial<Record<CheckKey, "full" | "min">>; extra?: Record<string, boolean>; swings?: number; energy?: number; focus?: number; notes?: string; win?: string; fix?: string; next?: string; stretch?: Record<string, boolean>; drills?: Record<string, boolean>; round?: RoundStats; }
 interface LogEntry { date: string; kind: LogKind; value: number; note?: string; }
 interface AssessRec { date: string; results: Record<string, string>; }
 interface GameRec { date: string; id: string; score: number; }
 interface TestRec { date: string; v: Record<string, string>; }
 interface WedgeRec { date: string; ladder: "A" | "B"; hits: number[]; shots: number[]; done?: boolean; }
-interface Store { days: Record<string, DayRec>; logs: LogEntry[]; assess: AssessRec[]; games: GameRec[]; tests: TestRec[]; wedge: WedgeRec[]; startDate?: string; seeded?: boolean; }
+interface RewardRec { date: string; kind: string; id: string; }
+interface Store { days: Record<string, DayRec>; logs: LogEntry[]; assess: AssessRec[]; games: GameRec[]; tests: TestRec[]; wedge: WedgeRec[]; startDate?: string; seeded?: boolean; rewards?: RewardRec[]; badges?: { id: string; date: string }[]; ifThen?: string[]; }
 
 const STORE_KEY = "golf-speed-plan-v1";
 const TZ = "America/New_York";
@@ -574,7 +577,7 @@ function mmss(s: number): string { const v = Math.max(0, Math.round(s)); return 
 function emptyStore(): Store { return { days: {}, logs: [SEED_LOG], assess: [], games: [], tests: [], wedge: [], seeded: true }; }
 function normalize(parsed: Partial<Store>): Store {
   const logs = parsed.logs || [];
-  return { days: parsed.days || {}, logs: parsed.seeded ? logs : [SEED_LOG, ...logs], assess: parsed.assess || [], games: parsed.games || [], tests: parsed.tests || [], wedge: Array.isArray(parsed.wedge) ? parsed.wedge : [], startDate: parsed.startDate, seeded: true };
+  return { days: parsed.days || {}, logs: parsed.seeded ? logs : [SEED_LOG, ...logs], assess: parsed.assess || [], games: parsed.games || [], tests: parsed.tests || [], wedge: Array.isArray(parsed.wedge) ? parsed.wedge : [], startDate: parsed.startDate, seeded: true, rewards: Array.isArray(parsed.rewards) ? parsed.rewards : [], badges: Array.isArray(parsed.badges) ? parsed.badges : [], ifThen: Array.isArray(parsed.ifThen) ? parsed.ifThen : undefined };
 }
 function loadStore(): { store: Store; ok: boolean } {
   try {
@@ -589,11 +592,162 @@ function dayScore(store: Store, d: Date): number {
   const plan = planFor(iso(d), JS_DAYS[d.getDay()]);
   return plan.checks.filter((k) => rec.c[k]).length / plan.checks.length;
 }
-function streakOf(test: (d: Date) => boolean, today: Date): number {
-  let d = test(today) ? today : addDays(today, -1);
-  let n = 0;
-  while (n < 500 && test(d)) { n += 1; d = addDays(d, -1); }
-  return n;
+/** A day counts for streaks when the minimum is done: any Minimum completion, or about 25%+ of the checklist. */
+function dayCounts(store: Store, d: Date): boolean {
+  const rec = store.days[iso(d)];
+  if (!rec) return false;
+  if (rec.min && Object.values(rec.min).some((v) => !!v)) return true;
+  return dayScore(store, d) >= 0.25;
+}
+/** Never-miss-twice: one missed day keeps the chain, two in a row end it; 1 freeze per week covers a miss. */
+function streakOf(test: (d: Date) => boolean, today: Date): number { return streakInfo(test, today).streak; }
+const SESSION_KEYS: CheckKey[] = ["mobility", "hipmini", "strength", "speed", "hips", "wedges", "putting", "sim", "eighteen", "nine", "recovery", "review"];
+function computeXp(store: Store): number {
+  let xp = 0;
+  Object.keys(store.days).forEach((date) => {
+    const r = store.days[date]; if (!r) return;
+    Object.keys(r.c || {}).forEach((k) => { if (!r.c[k]) return; if (SESSION_KEYS.indexOf(k as CheckKey) >= 0) xp += r.min && r.min[k] ? XP.min : XP.full; else xp += XP.item; });
+    if (r.extra) xp += Object.values(r.extra).filter((v) => !!v).length * XP.extra;
+  });
+  const userLogs = store.logs.filter((l) => !(l.date === SEED_LOG.date && l.note === SEED_LOG.note));
+  xp += userLogs.length * XP.log;
+  xp += store.wedge.filter((w) => w.done).length * XP.log + store.games.length * XP.log + store.tests.length * XP.test;
+  let best = SEED_LOG.value;
+  [...userLogs].filter((l) => l.kind === "speed").sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).forEach((l) => { if (l.value > best) { xp += XP.pr; best = l.value; } });
+  return xp;
+}
+function nextTargetOf(best: number): number { const m = MILESTONES.find((x) => x > best); return m || Math.floor(best) + 2; }
+function fmtIn(mins: number): string { const m = Math.max(0, Math.round(mins)); if (m < 60) return `${m} min`; const h = Math.floor(m / 60); const r = m % 60; return r ? `${h} h ${r} min` : `${h} h`; }
+
+/** Countdown ring (SVG). */
+function Ring(props: { frac: number; size?: number; stroke?: number; color?: string; track?: string; children?: any }) {
+  const s = props.size || 120; const w = props.stroke || 8; const r = (s - w) / 2; const c = 2 * Math.PI * r; const f = Math.max(0, Math.min(1, props.frac || 0));
+  return (
+    <div style={{ position: "relative", width: s, height: s, flex: "0 0 auto" }}>
+      <svg width={s} height={s} aria-hidden style={{ display: "block", transform: "rotate(-90deg)" }}>
+        <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke={props.track || "var(--fill2)"} strokeWidth={w} />
+        <circle cx={s / 2} cy={s / 2} r={r} fill="none" stroke={props.color || "var(--accent)"} strokeWidth={w} strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - f)} style={{ transition: "stroke-dashoffset 1s linear" }} />
+      </svg>
+      <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center" }}>{props.children}</div>
+    </div>
+  );
+}
+/** Compact Full / Minimum switch (black pill = active). */
+function ModeSwitch(props: { mode: "full" | "min"; onMode: (m: "full" | "min") => void; small?: boolean }) {
+  const h = props.small ? 26 : 34;
+  const b = (on: boolean) => ({ height: h, padding: props.small ? "0 10px" : "0 14px", borderRadius: 999, border: "none", cursor: "pointer", background: on ? "var(--ink)" : "transparent", color: on ? "var(--on-ink)" : "var(--text2)", fontSize: props.small ? 11.5 : 13, fontWeight: on ? 600 : 500, whiteSpace: "nowrap" as any });
+  return (
+    <span role="group" aria-label="Full or minimum version" style={{ display: "inline-flex", gap: 2, padding: 3, borderRadius: 999, background: "var(--fill2)", flex: "0 0 auto" }}>
+      <button aria-pressed={props.mode === "full"} onClick={(e) => { e.stopPropagation(); props.onMode("full"); }} style={b(props.mode === "full")}>Full</button>
+      <button aria-pressed={props.mode === "min"} onClick={(e) => { e.stopPropagation(); props.onMode("min"); }} style={b(props.mode === "min")}>Minimum</button>
+    </span>
+  );
+}
+/** Session card header: Full / Minimum toggle with the minimum text right on the card. */
+function MinPanel(props: { title?: string; mode: "full" | "min"; onMode: (m: "full" | "min") => void; text: string; done: boolean; minDone: boolean; onDoneMin?: () => void; doneLabel?: string; children?: any }) {
+  const min = props.mode === "min";
+  return (
+    <div style={{ ...CARD, padding: 16, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{props.title || "Today's version"}</div>
+        <ModeSwitch mode={props.mode} onMode={props.onMode} />
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <IconDot name={min ? "zap" : "target"} tone={min ? "accent" : "soft"} size={30} />
+        <div style={{ flex: 1, display: "grid", gap: 2 }}>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>{min ? "Minimum version · counts as done for today and your streak" : "Minimum if today is hard"}</div>
+          <div style={{ fontSize: 14, lineHeight: "20px", color: min ? "var(--text)" : "var(--text2)", fontWeight: min ? 500 : 400 }}>{props.text}</div>
+        </div>
+      </div>
+      {min && props.children}
+      {min && (props.done ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: "var(--link)", fontWeight: 600 }}>{I("check", 16, 2.5)}{props.minDone ? "Minimum done. That counts. Stop here or keep going." : "Done today."}</div>
+      ) : props.onDoneMin ? (
+        <button onClick={props.onDoneMin} style={{ minHeight: 48, borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>{props.doneLabel || "Done: minimum"}</button>
+      ) : null)}
+    </div>
+  );
+}
+/** Neutral "stop here" cap message once planned volume is done. */
+function CapNote(props: { title?: string; text?: string }) {
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "14px 16px", borderRadius: 18, background: "var(--accent-subtle)" }}>
+      <span style={{ color: "var(--accent)", paddingTop: 1 }}>{I("check", 20, 2.25)}</span>
+      <div style={{ display: "grid", gap: 2 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>{props.title || "Session complete, stop here"}</div>
+        <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{props.text || "Planned volume is done. More today won't add speed; recovery will."}</div>
+      </div>
+    </div>
+  );
+}
+/** Gentle overreach note (neutral, not red). */
+function EaseNote(props: { text: string }) {
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "14px 16px", borderRadius: 18, background: "var(--warn-bg)" }}>
+      <span style={{ color: "#c98a00", paddingTop: 1 }}>{I("shield", 20)}</span>
+      <div style={{ display: "grid", gap: 2 }}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>That's past today's plan</div>
+        <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{props.text}</div>
+      </div>
+    </div>
+  );
+}
+/** "Next: X in Y min" chip. */
+function NextChip(props: { label: string; mins: number; dark?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", height: 30, padding: "0 12px", borderRadius: 999, background: props.dark ? "rgba(255,255,255,0.12)" : "var(--fill2)", color: props.dark ? "#fff" : "var(--text2)", fontSize: 12.5, fontWeight: 500 }}>
+      {I("clock", 13)}<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{`Next: ${props.label} in ${fmtIn(props.mins)}`}</span>
+    </span>
+  );
+}
+/** Workout session timer: countdown ring, soft chime at each exercise change, and it ends the session at the planned time. */
+function SessionTimer(props: { items: { name: string; min: number }[]; totalMin: number; startedAt: number | null; onStart: () => void; onStop: () => void }) {
+  const [tick, setTick] = useState<number>(Date.now());
+  const running = props.startedAt !== null;
+  useEffect(() => { if (!running) return; const id = window.setInterval(() => setTick(Date.now()), 1000); return () => window.clearInterval(id); }, [running]);
+  const total = props.totalMin * 60;
+  const el = running ? Math.max(0, (tick - (props.startedAt as number)) / 1000) : 0;
+  const left = Math.max(0, total - el);
+  const over = running && el >= total;
+  const scale = props.items.reduce((a, b) => a + b.min, 0) > 0 ? props.totalMin / props.items.reduce((a, b) => a + b.min, 0) : 1;
+  let acc = 0; let idx = props.items.length - 1;
+  for (let i = 0; i < props.items.length; i++) { acc += props.items[i].min * 60 * scale; if (el < acc) { idx = i; break; } }
+  const lastRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!running) { lastRef.current = undefined; return; }
+    const key = over ? -1 : idx;
+    if (lastRef.current !== undefined && lastRef.current !== key) { chime(); buzz(); }
+    lastRef.current = key;
+  }, [idx, over, running]);
+  return (
+    <div style={{ ...CARD, padding: 16, display: "flex", gap: 16, alignItems: "center" }}>
+      <Ring frac={running ? left / total : 1} size={92} stroke={7}>
+        <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums" }}>{mmss(running ? left : total)}</div>
+        <div style={{ fontSize: 10.5, color: "var(--text3)" }}>{running ? (over ? "time's up" : "left") : "planned"}</div>
+      </Ring>
+      <div style={{ flex: 1, display: "grid", gap: 6 }}>
+        <div style={{ fontSize: 12, color: "var(--text3)" }}>{over ? "Planned end reached" : running ? `Now · ${idx + 1} of ${props.items.length}` : "Session timer"}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, lineHeight: "19px" }}>{over ? "The timer ends it. Stop here." : running ? props.items[idx].name : `${Math.round(props.totalMin)} min · chime at each change`}</div>
+        <button onClick={running ? props.onStop : props.onStart} style={{ justifySelf: "start", height: 36, padding: "0 16px", borderRadius: 999, border: "none", background: running ? "var(--fill2)" : "var(--ink)", color: running ? "var(--text)" : "var(--on-ink)", fontSize: 13.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{running ? "Stop timer" : <Fragment>{I("play", 11)}Start timer</Fragment>}</button>
+      </div>
+    </div>
+  );
+}
+/** Reward / PR toast. */
+function Toast(props: { t: { title: string; body: string; icon: string; meta?: string }; onClose: () => void }) {
+  return (
+    <div role="status" aria-live="polite" style={{ position: "fixed", left: 12, right: 12, bottom: `calc(${NAV_BOTTOM} + ${NAV_H + 12}px)`, zIndex: 90, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+      <div className="fadein" style={{ ...CARD, pointerEvents: "auto", width: "100%", maxWidth: 440, padding: 14, display: "flex", gap: 12, alignItems: "flex-start", boxShadow: "0 12px 34px rgba(17,19,18,0.18), 0 2px 6px rgba(17,19,18,0.08)" }}>
+        <IconDot name={props.t.icon} tone="ink" size={40} />
+        <div style={{ flex: 1, display: "grid", gap: 2 }}>
+          {props.t.meta && <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--link)", letterSpacing: 0.2 }}>{props.t.meta}</div>}
+          <div style={{ fontSize: 15, fontWeight: 600, lineHeight: "20px" }}>{props.t.title}</div>
+          <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{props.t.body}</div>
+        </div>
+        <button onClick={props.onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 15, border: "none", background: "var(--fill2)", color: "var(--text2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flex: "0 0 auto", padding: 0 }}>{I("x", 14, 2)}</button>
+      </div>
+    </div>
+  );
 }
 function thinLabels(labels: string[]): string[] {
   if (labels.length <= 8) return labels;
@@ -610,21 +764,33 @@ function sessionRows(s: Session): string[][] {
   return s.items.map((e) => { const a = t; t += e.min / 60; return [fmtRange(a, t), e.name, `${e.dose}, rest ${e.rest}`, e.load]; });
 }
 
-function TapItem(props: { label: string; done: boolean; onTap: () => void; openLabel?: string; onOpen?: () => void; first?: boolean }) {
+function TapItem(props: { label: string; done: boolean; onTap: () => void; openLabel?: string; onOpen?: () => void; first?: boolean; minText?: string; mode?: "full" | "min"; onMode?: (m: "full" | "min") => void; minDone?: boolean }) {
+  const isMin = props.mode === "min";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 54, padding: "8px 0", borderTop: props.first ? "none" : "1px solid var(--border)" }}>
-      <Tick done={props.done} onClick={props.onTap} label={props.done ? `Untick ${props.label}` : `Tick ${props.label}`} size={28} />
-      <button onClick={props.onTap} style={{ flex: 1, minHeight: 38, border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: 15, lineHeight: "20px", color: props.done ? "var(--text3)" : "var(--text)", textDecoration: props.done ? "line-through" : "none", textDecorationColor: "var(--text3)" }}>{props.label}</button>
+    <div style={{ display: "flex", alignItems: props.minText ? "flex-start" : "center", gap: 12, minHeight: 54, padding: "8px 0", borderTop: props.first ? "none" : "1px solid var(--border)" }}>
+      <span style={{ paddingTop: props.minText ? 5 : 0 }}><Tick done={props.done} onClick={props.onTap} label={props.done ? `Untick ${props.label}` : `Tick ${props.label}`} size={28} /></span>
+      <div style={{ flex: 1, display: "grid", gap: 6 }}>
+        <button onClick={props.onTap} style={{ minHeight: 38, border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: "pointer", fontSize: 15, lineHeight: "20px", color: props.done ? "var(--text3)" : "var(--text)", textDecoration: props.done ? "line-through" : "none", textDecorationColor: "var(--text3)" }}>{props.label}</button>
+        {props.minText && props.onMode && (
+          <div style={{ display: "grid", gap: 6, marginTop: -4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <ModeSwitch small mode={props.mode || "full"} onMode={props.onMode} />
+              {props.done && props.minDone && <span style={{ fontSize: 12, color: "var(--link)", fontWeight: 600 }}>Minimum done</span>}
+            </div>
+            {isMin && <div style={{ fontSize: 12.5, lineHeight: "17px", color: "var(--text2)" }}>{`Minimum: ${props.minText}`}</div>}
+          </div>
+        )}
+      </div>
       {props.onOpen && (
         <button onClick={props.onOpen} style={{ flex: "0 0 auto", height: 34, padding: "0 14px 0 11px", borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>{I("play", 12)}{props.openLabel === "Start timer" ? "Timer" : props.openLabel || "Open"}</button>
       )}
     </div>
   );
 }
-function TapList(props: { items: { key: CheckKey; label: string; done: boolean }[]; onTap: (k: CheckKey) => void; onOpenMobility?: () => void }) {
+function TapList(props: { items: { key: CheckKey; label: string; done: boolean }[]; onTap: (k: CheckKey) => void; onOpenMobility?: () => void; minOf?: (k: CheckKey) => string | undefined; modeOf?: (k: CheckKey) => "full" | "min"; onMode?: (k: CheckKey, m: "full" | "min") => void; minDoneOf?: (k: CheckKey) => boolean }) {
   return (
     <div style={{ display: "grid", marginTop: -6, marginBottom: -6 }}>
-      {props.items.map((it, i) => <TapItem key={it.key} first={i === 0} label={it.label} done={it.done} onTap={() => props.onTap(it.key)} openLabel="Start timer" onOpen={it.key === "mobility" ? props.onOpenMobility : undefined} />)}
+      {props.items.map((it, i) => <TapItem key={it.key} first={i === 0} label={it.label} done={it.done} onTap={() => props.onTap(it.key)} openLabel="Start timer" onOpen={it.key === "mobility" ? props.onOpenMobility : undefined} minText={props.minOf ? props.minOf(it.key) : undefined} mode={props.modeOf ? props.modeOf(it.key) : undefined} onMode={props.onMode ? (m) => props.onMode && props.onMode(it.key, m) : undefined} minDone={props.minDoneOf ? props.minDoneOf(it.key) : false} />)}
     </div>
   );
 }
@@ -680,7 +846,7 @@ function GoalText(props: { text: string }) {
   );
 }
 function buzz() { try { if (navigator.vibrate) navigator.vibrate([200, 80, 200]); } catch (_e) {} }
-function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; onSet: (id: string, v: boolean) => void }) {
+function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; onSet: (id: string, v: boolean) => void; chimeNote?: boolean }) {
   const t = useGrokTheme();
   const moves = props.moves;
   const first = moves.findIndex((m) => !props.done[m.id]);
@@ -691,7 +857,7 @@ function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; on
   useEffect(() => { if (!running) return; const id = window.setInterval(() => setLeft((x) => x - 1), 1000); return () => window.clearInterval(id); }, [running]);
   useEffect(() => {
     if (running && left <= 0) {
-      buzz();
+      buzz(); chime();
       props.onSet(moves[idx].id, true);
       if (idx < moves.length - 1) { setIdx(idx + 1); setLeft(moves[idx + 1].secs); } else { setRunning(false); setLeft(0); }
     }
@@ -722,11 +888,17 @@ function StretchPlayer(props: { moves: Move[]; done: Record<string, boolean>; on
         <div style={{ fontSize: 14, color: "var(--text)" }}>{doseOf(m)}</div>
         <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{m.cue}</div>
         {DEMOS[m.id] && <DemoBlock key={m.id} id={m.id} />}
-        <div style={{ display: "grid", gap: 2, marginTop: 4 }}>
-          <div style={{ fontSize: 52, lineHeight: "58px", fontWeight: 600, letterSpacing: -1.5, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>{mmss(left)}</div>
-          <div style={{ fontSize: 13, color: "var(--text3)" }}>{phase}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 4 }}>
+          <Ring frac={m.secs > 0 ? left / m.secs : 0} size={118} stroke={8} track="var(--border)">
+            <div style={{ fontSize: 30, lineHeight: "34px", fontWeight: 600, letterSpacing: -1, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>{mmss(left)}</div>
+            <div style={{ fontSize: 11, color: "var(--text3)" }}>{running ? "left" : "ready"}</div>
+          </Ring>
+          <div style={{ flex: 1, display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 13, lineHeight: "18px", color: "var(--text2)" }}>{phase}</div>
+            {idx < moves.length - 1 && <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{`Next: ${moves[idx + 1].name}`}</div>}
+            {props.chimeNote !== false && <div style={{ fontSize: 12, color: "var(--text3)" }}>Soft chime at each change</div>}
+          </div>
         </div>
-        <Bar value={m.secs > 0 ? elapsed / m.secs : 0} height={6} track="var(--border)" />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
           <button style={btn(true)} onClick={() => setRunning(!running)}>{running ? "Pause" : left < m.secs ? "Resume" : "Start"}</button>
           <button style={btn(false)} onClick={finish}>Done, next</button>
@@ -870,7 +1042,7 @@ const SWAPS: Omit<Session, "start"> = {
   items: DRILLS.filter((d) => d.id.startsWith("swap_")).map((d) => ({ name: d.name.replace("Swap option: ", ""), dose: d.reps, rest: "-", load: d.cue, min: 2, demo: d.id } as any)),
 };
 const WORKOUTS: Workout[] = [
-  { id: "tests", title: "Testing Day tests", sub: "Speed, jumps, throws, hamstring retest", s: TESTS_AM, days: [], key: "speed", fallback: "ruler", testing: true, when: "Testing Day, 6:30 AM" },
+  { id: "tests", title: "Boss Challenge: Testing Day", sub: "Speed, jumps, throws, hamstring retest", s: TESTS_AM, days: [], key: "speed", fallback: "ruler", testing: true, when: "Testing Day, 6:30 AM" },
   { id: "strA", title: "Strength A", sub: "Power primer, trap bar, bench, hamstrings", s: STRENGTH_A, days: ["Tue"], key: "strength", fallback: "workout", when: "Tue 6:32 AM" },
   { id: "strB", title: "Strength B", sub: "Upper + rotational power, moderate legs", s: STRENGTH_B, days: ["Thu"], key: "strength", fallback: "workout", when: "Thu 6:32 AM" },
   { id: "stack", title: "TheStack speed", sub: "Speed session + Rapsodo transfer", s: SPEED, days: ["Mon", "Wed", "Sat"], key: "speed", fallback: "gauge", when: "Mon/Wed/Sat 6:34 AM" },
@@ -880,7 +1052,8 @@ const WORKOUTS: Workout[] = [
   { id: "ham", title: "Hamstring add-on", sub: "Optional, after the hip block", s: HAM_SAT, days: ["Sat"], fallback: "layers", optional: true, when: "Sat 7:14 AM (optional)" },
   { id: "swaps", title: "Kneel-jump swaps", sub: "Swap if knees/landing feel off", s: SWAPS, days: ["Thu"], fallback: "trend", optional: true, when: "Thu, in place of the kneeling jump" },
 ];
-function loadUi(): { name?: string; dark?: boolean } { try { return JSON.parse(window.localStorage.getItem(UI_KEY) || "{}"); } catch (_e) { return {}; } }
+interface UiPrefs { name?: string; dark?: boolean; seenBlock?: number; kindSeen?: string; stackPlan?: number; }
+function loadUi(): UiPrefs { try { return JSON.parse(window.localStorage.getItem(UI_KEY) || "{}"); } catch (_e) { return {}; } }
 
 export default function App() {
   const initial = useMemo(() => loadStore(), []);
@@ -892,7 +1065,12 @@ export default function App() {
   const [detail, setDetail] = useState<string | null>(null);
   const [player, setPlayer] = useState<number | null>(null);
   const [openEx, setOpenEx] = useState<number | null>(null);
-  const [ui, setUi] = useState<{ name?: string; dark?: boolean }>(loadUi());
+  const [ui, setUi] = useState<UiPrefs>(loadUi());
+  const [toasts, setToasts] = useState<any[]>([]);
+  const [timerStart, setTimerStart] = useState<{ id: string; at: number } | null>(null);
+  const [ifEdit, setIfEdit] = useState<boolean>(false);
+  const [bossDraft, setBossDraft] = useState<string>("");
+  const [minSpeedDraft, setMinSpeedDraft] = useState<string>("");
   const [speedDraft, setSpeedDraft] = useState<string>("");
   const [nameSheet, setNameSheet] = useState<boolean>(false);
   const [nameDraft, setNameDraft] = useState<string>("");
@@ -933,14 +1111,51 @@ export default function App() {
   const effRoutine: RoutineKey = routine === "daily" && liftDay ? "dailylift" : routine;
 
   const updateToday = (patch: Partial<DayRec>) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, ...patch } } }; });
-  const toggle = (k: CheckKey) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, [k]: !cur.c[k] } } } }; });
-  const setStretch = (r: RoutineKey, id: string, v: boolean) => setStore((s) => {
-    const cur = s.days[todayIso] || { c: {} };
-    const st = { ...(cur.stretch || {}), [`${r}:${id}`]: v };
-    const all = ROUTINES[r].moves.every((m) => st[`${r}:${m.id}`]);
-    const c = r !== "warmup" && all ? { ...cur.c, mobility: true } : cur.c;
-    return { ...s, days: { ...s.days, [todayIso]: { ...cur, stretch: st, c } } };
-  });
+  const patchDay = (fn: (cur: DayRec) => DayRec) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: fn(cur) } }; });
+  const pushToast = (t: any) => setToasts((q) => [...q, t].slice(-3));
+  const modeOf = (k: CheckKey): "full" | "min" => (rec.mode && rec.mode[k]) || "full";
+  const setMode = (k: CheckKey, m: "full" | "min") => patchDay((cur) => ({ ...cur, mode: { ...(cur.mode || {}), [k]: m } }));
+  const minText = (k: CheckKey): string | undefined => (k === "strength" ? (todayKey === "Tue" ? MINIMUMS.strengthA : todayKey === "Thu" ? MINIMUMS.strengthB : MINIMUMS.strength) : MINIMUMS[k]);
+  const minDoneOf = (k: CheckKey) => !!(rec.c[k] && rec.min && rec.min[k]);
+  /** Immediate reward on every session, plus a ~40% variable bonus (badge, fact, bonus drill or treat). */
+  const celebrate = (k: CheckKey, isMin: boolean) => {
+    const meta = isMin ? `+${XP.min} XP · Minimum counts` : `+${XP.full} XP · Full session, double XP`;
+    const r = rollReward((store.badges || []).map((b) => b.id));
+    if (r) {
+      setStore((s) => ({ ...s, rewards: [...(s.rewards || []), { date: todayIso, kind: r.kind, id: r.id }].slice(-300), badges: r.kind === "badge" ? [...(s.badges || []).filter((b) => b.id !== r.id), { id: r.id, date: todayIso }] : s.badges || [] }));
+      pushToast({ ...r, meta });
+    } else pushToast({ icon: "check", title: isMin ? "Minimum done" : "Session done", body: isMin ? "That counts for today and for your streak." : "Logged. Nice work.", meta });
+  };
+  const toggle = (k: CheckKey) => {
+    const was = !!rec.c[k]; const isMin = modeOf(k) === "min" && !!minText(k);
+    patchDay((cur) => ({ ...cur, c: { ...cur.c, [k]: !was }, min: { ...(cur.min || {}), [k]: !was && isMin } }));
+    if (!was && SESSION_KEYS.indexOf(k) >= 0) celebrate(k, isMin);
+  };
+  const doneMin = (k: CheckKey) => {
+    const was = !!rec.c[k];
+    patchDay((cur) => ({ ...cur, c: { ...cur.c, [k]: true }, min: { ...(cur.min || {}), [k]: true }, mode: { ...(cur.mode || {}), [k]: "min" } }));
+    if (!was) celebrate(k, true);
+  };
+  const setStretch = (r: RoutineKey, id: string, v: boolean) => {
+    const st0 = { ...(rec.stretch || {}), [`${r}:${id}`]: v };
+    const willFinish = r !== "warmup" && ROUTINES[r].moves.every((m) => st0[`${r}:${m.id}`]) && !rec.c.mobility;
+    setStore((s) => {
+      const cur = s.days[todayIso] || { c: {} };
+      const st = { ...(cur.stretch || {}), [`${r}:${id}`]: v };
+      const all = ROUTINES[r].moves.every((m) => st[`${r}:${m.id}`]);
+      const c = r !== "warmup" && all ? { ...cur.c, mobility: true } : cur.c;
+      const min = r !== "warmup" && all && !cur.c.mobility ? { ...(cur.min || {}), mobility: false } : cur.min;
+      return { ...s, days: { ...s.days, [todayIso]: { ...cur, stretch: st, c, ...(min ? { min } : {}) } } };
+    });
+    if (willFinish) celebrate("mobility", false);
+  };
+  const MIN_MOVES: Move[] = MIN_MOBILITY_IDS.map((id) => DAILY_MOVES.find((m) => m.id === id) as Move);
+  const setMinMove = (id: string, v: boolean) => {
+    const st0 = { ...(rec.stretch || {}), [`min:${id}`]: v };
+    const all = MIN_MOVES.every((m) => st0[`min:${m.id}`]);
+    patchDay((cur) => { const st = { ...(cur.stretch || {}), [`min:${id}`]: v }; const done = MIN_MOVES.every((m) => st[`min:${m.id}`]); return { ...cur, stretch: st, ...(done && !cur.c.mobility ? { c: { ...cur.c, mobility: true }, min: { ...(cur.min || {}), mobility: true } } : {}) }; });
+    if (all && !rec.c.mobility) celebrate("mobility", true);
+  };
   const openStretch = (r?: RoutineKey) => { setRoutine(r ? (r === "dailylift" ? "daily" : r) : todayKey === "Sun" ? "sunday" : "daily"); go("stretch"); };
   const toggleDrill = (id: string) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; const dr = { ...(cur.drills || {}), [id]: !(cur.drills && cur.drills[id]) }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, drills: dr } } }; });
   const updateRound = (patch: RoundStats) => setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, round: { ...(cur.round || {}), ...patch } } } }; });
@@ -972,7 +1187,9 @@ export default function App() {
     const note = [round.gir ? `GIR ${round.gir}` : "", round.putts ? `${round.putts} putts` : "", round.focus ? `focus: ${round.focus}` : ""].filter((x) => x).join(", ");
     const kind: LogKind = nineDay ? "score9" : "score18";
     const ck: CheckKey = nineDay ? "nine" : "eighteen";
+    const was = !!rec.c[ck];
     setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, logs: [...s.logs.filter((l) => !(l.kind === kind && l.date === todayIso)), { date: todayIso, kind, value: v, note: note || undefined }], days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, [ck]: true } } } }; });
+    if (!was) celebrate(ck, false);
   };
   const nextTest = TESTING_DATES.find((d) => d >= todayIso);
   const saveTests = () => {
@@ -985,6 +1202,7 @@ export default function App() {
       if (v.rball && !isNaN(Number(v.rball))) extra.push({ date: todayIso, kind: "ball", value: Number(v.rball), note: "Testing Day: Rapsodo" });
       return { ...s, tests: [...s.tests.filter((x) => x.date !== todayIso), { date: todayIso, v }], logs: [...s.logs.filter((l) => !(l.date === todayIso && (l.note || "").startsWith("Testing Day"))), ...extra] };
     });
+    if (v.rspeed && !isNaN(Number(v.rspeed))) speedToast(Number(v.rspeed));
   };
   const testHistory: TestRec[] = [BASELINE_TEST, ...[...store.tests].sort((a, b) => (a.date < b.date ? -1 : 1))].slice(-5);
 
@@ -999,7 +1217,8 @@ export default function App() {
   const wedgeUndo = () => { const w: any = JSON.parse(JSON.stringify(wedgeRec)); const q = w.seq || []; if (!q.length) return; const last = q.pop(); const i = Math.floor(last / 2); w.shots[i] = Math.max(0, w.shots[i] - 1); if (last % 2) w.hits[i] = Math.max(0, w.hits[i] - 1); w.seq = q; putWedge(w); };
   const wedgeShotsN = wedgeRec.shots.reduce((a, b) => a + b, 0);
   const wedgeSwitch = () => { if (wedgeShotsN > 0 && !window.confirm("Switch ladders and clear today's shots?")) return; putWedge(blankWedge(wedgeRec.ladder === "A" ? "B" : "A")); };
-  const wedgeFinish = () => { if (wedgeShotsN === 0) return; putWedge({ ...wedgeRec, done: true }); setStore((s) => { const cur = s.days[todayIso] || { c: {} }; return { ...s, days: { ...s.days, [todayIso]: { ...cur, c: { ...cur.c, wedges: true } } } }; }); };
+  const wedgeTotal = WEDGE_LADDERS[wedgeRec.ladder].targets.length * WEDGE_LADDERS[wedgeRec.ladder].shots;
+  const wedgeFinish = () => { if (wedgeShotsN === 0) return; const was = !!rec.c.wedges; const isMin = wedgeShotsN < wedgeTotal; putWedge({ ...wedgeRec, done: true }); patchDay((cur) => ({ ...cur, c: { ...cur.c, wedges: true }, min: { ...(cur.min || {}), wedges: isMin } })); if (!was) celebrate("wedges", isMin); };
   const wedgeHist = [...store.wedge].filter((w) => w.shots.some((x) => x > 0)).sort((a, b) => (a.date < b.date ? -1 : 1));
   const wPct = (w: WedgeRec) => { const sh = w.shots.reduce((a, b) => a + b, 0); return sh ? Math.round((w.hits.reduce((a, b) => a + b, 0) / sh) * 100) : 0; };
   const labelFor = (p: DayPlan, k: CheckKey): string => `${p.labels[k] || BASE_LABELS[k]}${k === "wedges" && p === plan ? ` · Ladder ${nextLadder}` : ""}`;
@@ -1008,7 +1227,8 @@ export default function App() {
   const currentBlock = blocks.find((b) => hourNow >= b.s && hourNow < b.e);
   const nextBlock = blocks.find((b) => b.s > hourNow);
   const firstOpen = items.find((i) => !i.done);
-  const dayStreak = streakOf((d) => dayScore(store, d) >= 0.7, now);
+  const dayInfo = streakInfo((d) => dayCounts(store, d), now);
+  const dayStreak = dayInfo.streak;
   const mobStreak = streakOf((d) => !!(store.days[iso(d)] && store.days[iso(d)].c.mobility), now);
   const bedStreak = streakOf((d) => !!(store.days[iso(d)] && store.days[iso(d)].c.bed), now);
   const checkInDays = Object.keys(store.days).filter((k) => Object.values(store.days[k].c).some((v) => !!v)).length;
@@ -1032,7 +1252,7 @@ export default function App() {
   const benchLogs = logsOf("bench");
   const trapLogs = logsOf("trap");
   const scoreLogs = store.logs.filter((l) => l.kind === "score18" || l.kind === "score9" || l.kind === "hcp").sort((a, b) => (a.date < b.date ? 1 : -1));
-  const addLog = () => { const v = Number(logValue); if (!logValue || isNaN(v)) return; setStore((s) => ({ ...s, logs: [...s.logs, { date: logDate || todayIso, kind: logKind, value: v }] })); setLogValue(""); };
+  const addLog = () => { const v = Number(logValue); if (!logValue || isNaN(v)) return; setStore((s) => ({ ...s, logs: [...s.logs, { date: logDate || todayIso, kind: logKind, value: v }] })); setLogValue(""); if (logKind === "speed") speedToast(v); };
   const undoLog = () => setStore((s) => ({ ...s, logs: s.logs.slice(0, -1) }));
   const saveAssess = () => {
     const results: Record<string, string> = {};
@@ -1069,15 +1289,114 @@ export default function App() {
   const wRowDone = (w: Workout, i: number) => { const id = demoFor(w.s.items[i]); return !!(drillDone[wRowKey(w, i)] || (id && DRILL_IDS.has(id) && drillDone[id])); };
   const wDoneN = (w: Workout) => w.s.items.filter((_e, i) => wRowDone(w, i)).length;
   const setRow = (w: Workout, i: number, v: boolean) => setStore((st) => { const cur = st.days[todayIso] || { c: {} }; const dr = { ...(cur.drills || {}), [wRowKey(w, i)]: v }; const id = demoFor(w.s.items[i]); if (id && DRILL_IDS.has(id)) dr[id] = v; return { ...st, days: { ...st.days, [todayIso]: { ...cur, drills: dr } } }; });
-  const finishWorkout = (w: Workout) => { setPlayer(null); if (w.key) setStore((st) => { const cur = st.days[todayIso] || { c: {} }; return { ...st, days: { ...st.days, [todayIso]: { ...cur, c: { ...cur.c, [w.key as string]: true } } } }; }); };
+  const finishWorkout = (w: Workout) => { setPlayer(null); if (w.key) { const k = w.key as CheckKey; const was = !!rec.c[k]; patchDay((cur) => ({ ...cur, c: { ...cur.c, [k]: true }, min: { ...(cur.min || {}), [k]: false } })); if (!was) celebrate(k, false); } };
   const wThumb = (w: Workout) => { for (const e of w.s.items) { const t2 = demoThumb(demoFor(e)); if (t2) return t2; } return null; };
   const todayWorkouts = WORKOUTS.filter(wIsToday);
   const otherWorkouts = WORKOUTS.filter((w) => !wIsToday(w) && !w.testing);
   const curW = detail ? WORKOUTS.find((w) => w.id === detail) : undefined;
   const golfDrillsToday = todayDrills.filter((d) => d.group === "Golf");
   const workDrillsToday = todayDrills.filter((d) => d.group !== "Golf");
-  const addSpeed = () => { const v = Number(speedDraft); if (!speedDraft || isNaN(v)) return; setStore((st) => ({ ...st, logs: [...st.logs, { date: todayIso, kind: "speed", value: v }] })); setSpeedDraft(""); };
-  const moreTitles: Record<string, string> = { plan: "Weekly plan", phases: "12 weeks", log: "Log + backup", assess: "Tests", food: "Food", drills: "Drills + how-to", settings: "Settings", today: "Full day view" };
+  const logSpeed = (raw: string, note?: string): boolean => { const v = Number(raw); if (!raw || isNaN(v) || v <= 0) return false; setStore((st) => ({ ...st, logs: [...st.logs, { date: todayIso, kind: "speed", value: v, ...(note ? { note } : {}) }] })); speedToast(v); return true; };
+  const addSpeed = () => { if (logSpeed(speedDraft)) setSpeedDraft(""); };
+  // ----- ADHD-friendly layer -----
+  const speedToast = (v: number) => {
+    const prev = bestSpeed;
+    if (v <= prev) return;
+    const crossed = MILESTONES.filter((m) => prev < m && v >= m);
+    const t2 = nextTargetOf(v);
+    pushToast({ icon: "trophy", meta: `+${XP.pr} XP · PR`, title: crossed.length ? `Milestone hit: ${crossed[crossed.length - 1]} mph` : `New PR: ${v} mph`, body: `${crossed.length ? `New PR: ${v} mph. ` : ""}Up ${Math.round((v - prev) * 10) / 10} mph on your best. Next target: ${t2} mph.` });
+  };
+  const xp = useMemo(() => computeXp(store), [store]);
+  const lvl = levelOf(xp);
+  const lvlRef = useRef<number>(lvl.idx);
+  useEffect(() => { if (lvl.idx > lvlRef.current) pushToast({ icon: "zap", meta: `${xp.toLocaleString()} XP`, title: `Level up: ${lvl.cur.name}`, body: lvl.next ? `Next level: ${lvl.next.name} at ${lvl.next.xp.toLocaleString()} XP.` : "Top level. Keep stacking days." }); lvlRef.current = lvl.idx; }, [lvl.idx]);
+  useEffect(() => { if (!toasts.length) return; const id = window.setTimeout(() => setToasts((q) => q.slice(1)), 8000); return () => window.clearTimeout(id); }, [toasts]);
+  const milestoneHits = MILESTONES.map((m) => { const hit = speedLogs.find((l) => l.value >= m); return { m, date: hit ? hit.date : undefined }; });
+  const todaySpeeds = speedLogs.filter((l) => l.date === todayIso).map((l) => l.value);
+  const todayBest = todaySpeeds.length ? Math.max(...todaySpeeds) : 0;
+  const prevBest = speedLogs.filter((l) => l.date < todayIso).reduce((m, l) => Math.max(m, l.value), 0) || SEED_LOG.value;
+  const isBossDay = todayKey === "Wed";
+  const bossPR = todayBest > prevBest;
+  // Self-compassion after missed days
+  const hadHistory = Object.keys(store.days).some((k) => k < todayIso && Object.values((store.days[k] && store.days[k].c) || {}).some((v) => !!v));
+  let missedDays = 0;
+  for (let i = 1; i <= 7; i++) { if (dayCounts(store, addDays(now, -i))) break; missedDays += 1; }
+  const showKind = hadHistory && missedDays >= 1 && !dayCounts(store, now) && ui.kindSeen !== todayIso;
+  const startMinimum = () => {
+    const keys = plan.checks.filter((k) => !!minText(k));
+    patchDay((cur) => { const mode = { ...(cur.mode || {}) }; keys.forEach((k) => { if (!cur.c[k]) mode[k] = "min"; }); return { ...cur, mode }; });
+    setUi({ ...ui, kindSeen: todayIso });
+    const first = openItems.find((i) => !!minText(i.key) && i.b && i.b.e > hourNow) || openItems.find((i) => !!minText(i.key));
+    if (!first || first.key === "mobility" || first.key === "hipmini") openStretch(); else go(catOf(first.key));
+  };
+  // Visible time
+  const nextTask = blocks.find((b) => b.s > hourNow && (b.k || b.routine)) || nextBlock;
+  const nextShort = (b: Block) => b.t.split(/\s*[(:]/)[0];
+  const nextChip = nextTask ? <NextChip label={nextShort(nextTask)} mins={(nextTask.s - hourNow) * 60} /> : null;
+  const trainToday = plan.checks.filter((k) => TRAIN_KEYS.indexOf(k) >= 0);
+  const allTrainDone = trainToday.length > 0 && trainToday.every((k) => !!rec.c[k]);
+  // Overreach
+  const stackPlan = ui.stackPlan || 40;
+  const swingsOver = !!rec.swings && rec.swings > stackPlan * 1.2;
+  const extraWorkouts = WORKOUTS.filter((w) => !w.optional && !w.testing && !wIsToday(w) && wDoneN(w) > 0);
+  const easeText = swingsOver ? `${rec.swings} TheStack swings is more than 120% of the planned ${stackPlan}. Speed is built in recovery: call it here and rest.` : extraWorkouts.length ? `Extra session today (${extraWorkouts.map((w) => w.title).join(", ")}). Hyperfocus is a strength, but more volume won't add speed today. Suggest rest.` : "";
+  // 3-week drill rotation
+  const rotStart = store.startDate || Object.keys(store.days).sort()[0] || SEED_LOG.date;
+  const rot = rotationBlock(rotStart, now);
+  useEffect(() => { if (ui.seenBlock === undefined) setUi((u) => ({ ...u, seenBlock: rot.idx })); }, [rot.idx]);
+  const newBlock = ui.seenBlock !== undefined && ui.seenBlock < rot.idx;
+  const ifLines = store.ifThen && store.ifThen.length === 5 ? store.ifThen : IF_THEN_DEFAULT;
+  const setIfLine = (i: number, v: string) => setStore((s) => { const cur = s.ifThen && s.ifThen.length === 5 ? [...s.ifThen] : [...IF_THEN_DEFAULT]; cur[i] = v; return { ...s, ifThen: cur }; });
+  const extraDone = rec.extra || {};
+  const toggleExtra = (id: string) => patchDay((cur) => ({ ...cur, extra: { ...(cur.extra || {}), [id]: !(cur.extra && cur.extra[id]) } }));
+  const minProps = { minOf: minText, modeOf, onMode: setMode, minDoneOf };
+  const kindCard = showKind ? (
+    <div style={{ ...CARD, padding: 18, display: "grid", gap: 14 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+        <IconDot name="sun" tone="soft" size={40} />
+        <div style={{ flex: 1, display: "grid", gap: 4 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, lineHeight: "21px" }}>Missed days are data, not character.</div>
+          <div style={{ fontSize: 14.5, lineHeight: "20px", color: "var(--text)" }}>Today: just the minimum.</div>
+          <div style={{ fontSize: 12.5, lineHeight: "17px", color: "var(--text3)" }}>{dayStreak > 0 ? `Your chain is still going (${dayStreak} ${dayStreak === 1 ? "day" : "days"}). A minimum today keeps it.` : "One minimum today starts a fresh chain. No catch-up needed."}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={startMinimum} style={{ flex: 1, minHeight: 46, borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{I("play", 12)}Start minimum</button>
+        <button onClick={() => setUi({ ...ui, kindSeen: todayIso })} style={{ minHeight: 46, padding: "0 18px", borderRadius: 999, border: "none", background: "var(--fill2)", color: "var(--text)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Not now</button>
+      </div>
+    </div>
+  ) : null;
+  const bossCard = isBossDay ? (
+    <div style={{ ...CARD, padding: 16, display: "grid", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <IconDot name="trophy" tone="ink" size={42} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{isTestingDay ? "Weekly Boss Challenge · Testing Day" : "Weekly Boss Challenge · Wednesday"}</div>
+          <div style={{ fontSize: 16, fontWeight: 600, lineHeight: "21px" }}>{`Beat your best: ${prevBest} mph`}</div>
+        </div>
+      </div>
+      {bossPR ? (
+        <div style={{ borderRadius: 16, background: "var(--ink)", color: "var(--on-ink)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ color: "#5cc98a" }}>{I("trophy", 26)}</span>
+          <div style={{ display: "grid", gap: 1 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: 0.6, color: "#5cc98a" }}>PR · BOSS BEATEN</div>
+            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: -0.3 }}>{`${todayBest} mph (+${Math.round((todayBest - prevBest) * 10) / 10})`}</div>
+            <div style={{ fontSize: 13.5, opacity: 0.8 }}>{`Next target: ${nextTargetOf(todayBest)} mph`}</div>
+          </div>
+        </div>
+      ) : (
+        <Fragment>
+          <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{isTestingDay ? "Testing Day is the boss: R-Speed test after the 5-min warm-up. Log your best here or enter the full results on Tests." : "After the warm-up, 5 max-intent swings on TheStack. Log your best one here."}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={bossDraft} inputMode="decimal" placeholder={`${prevBest + 1}`} aria-label="Best swing speed today (mph)" onChange={(e) => setBossDraft(e.target.value)} style={{ flex: 1, minHeight: 48, padding: "0 14px", borderRadius: 14, border: "none", background: "var(--fill2)", color: "var(--text)", fontSize: 16 }} />
+            <button onClick={() => { if (logSpeed(bossDraft, "Boss Challenge")) setBossDraft(""); }} style={{ minHeight: 48, padding: "0 20px", borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Log mph</button>
+          </div>
+          {todayBest > 0 && <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{`Today's best so far: ${todayBest} mph. Full rest between swings.`}</div>}
+        </Fragment>
+      )}
+    </div>
+  ) : null;
+  const moreTitles: Record<string, string> = { badges: "Badge shelf", why: "Why it works", plan: "Weekly plan", phases: "12 weeks", log: "Log + backup", assess: "Tests", food: "Food", drills: "Drills + how-to", settings: "Settings", today: "Full day view" };
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", color: "var(--text)" }}>
@@ -1104,6 +1423,7 @@ export default function App() {
             </div>
           </div>
           <div style={{ marginTop: -36, position: "relative", zIndex: 2, display: "grid", gap: 12 }}>
+            {kindCard}
             {upNext ? (
               <button onClick={() => { if (upNext.key === "mobility" && !isTestingDay) openStretch(); else go(catOf(upNext.key)); }} style={{ ...CARD, display: "flex", alignItems: "center", gap: 14, padding: 16, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
                 <IconDot name="target" tone="ink" size={42} />
@@ -1116,8 +1436,25 @@ export default function App() {
             ) : (
               <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 14, padding: 16 }}><IconDot name="check" tone="accent" size={42} /><span style={{ fontSize: 15.5, fontWeight: 600 }}>Everything done today. Nice work.</span></div>
             )}
+            {(currentBlock || nextTask) && (
+              <div style={{ ...CARD, padding: 14, display: "flex", alignItems: "center", gap: 14 }}>
+                {currentBlock ? (
+                  <Ring frac={(currentBlock.e - hourNow) / Math.max(0.01, currentBlock.e - currentBlock.s)} size={60} stroke={6}>
+                    <div style={{ fontSize: 15, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: "17px" }}>{Math.max(0, Math.round((currentBlock.e - hourNow) * 60))}</div>
+                    <div style={{ fontSize: 9.5, color: "var(--text3)" }}>min</div>
+                  </Ring>
+                ) : <IconDot name="clock" tone="soft" size={42} />}
+                <div style={{ flex: 1, display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{currentBlock ? `Now · until ${fmtHour(currentBlock.e)}` : "Now · open time"}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 600, lineHeight: "19px" }}>{currentBlock ? currentBlock.t : hourNow < 6 ? "Sleep. Up at 6:00." : "Nothing scheduled right now"}</div>
+                  {nextChip && <div>{nextChip}</div>}
+                </div>
+              </div>
+            )}
+            {bossCard}
+            {easeText ? <EaseNote text={easeText} /> : allTrainDone ? <CapNote title="Training complete, stop here" text="Today's planned volume is done. Recovery is where the speed gets built." /> : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <StatCard icon="flame" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail="70%+ days in a row" />
+              <StatCard icon="flame" label="Streak" value={`${dayStreak}`} unit={dayStreak === 1 ? "day" : "days"} detail={`${dayInfo.last14} of last 14 days`} />
               <StatCard icon="timer" label="Time spent" value={`${minutesDone}`} unit={`/ ${minutesPlanned} min`} detail="Training today" />
             </div>
             <StatCard icon="gauge" label="Swing speed" value={`${lastSpeed}`} unit="mph" onClick={() => go("golf")}>
@@ -1126,6 +1463,19 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text3)" }}><span>90</span><span>{`${Math.max(0, Math.round((110 - lastSpeed) * 10) / 10)} mph to goal`}</span><span>110</span></div>
               </div>
             </StatCard>
+            <StatCard icon="zap" label="Level" value={lvl.cur.name} unit={`· ${xp.toLocaleString()} XP`} onClick={() => go("badges")}>
+              <div style={{ display: "grid", gap: 8 }}>
+                <Bar value={lvl.frac} height={6} />
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12, color: "var(--text3)" }}><span>{lvl.next ? `${lvl.toNext.toLocaleString()} XP to level ${lvl.next.name}` : "Top level reached"}</span><span>{`${(store.badges || []).length} badges`}</span></div>
+              </div>
+            </StatCard>
+            {newBlock && (
+              <button onClick={() => go("golf")} style={{ ...CARD, display: "flex", alignItems: "center", gap: 14, padding: 16, cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+                <IconDot name="spark" tone="accent" size={42} />
+                <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 12.5, color: "var(--text3)" }}>{`New block unlocked · block ${rot.num}`}</span><span style={{ display: "block", fontSize: 15, fontWeight: 600, lineHeight: "20px" }}>{`${rot.wedge.name} + ${rot.putt.name}`}</span></span>
+                <span style={{ color: "var(--text3)" }}>{Icon.chev}</span>
+              </button>
+            )}
           </div>
           <SectionTitle>Today</SectionTitle>
           <div className="hscroll" style={{ margin: "-4px -16px 0", padding: "4px 16px 10px", scrollPaddingLeft: 16 }}>
@@ -1148,7 +1498,7 @@ export default function App() {
           </Section>
 
           {isTestingDay && (
-            <Section heading="Testing Day today">
+            <Section heading="Boss Challenge: Testing Day">
               <Text>Only the 5-min warm-up this morning, then the tests at 6:30. Mobility score at 9:00 AM (Pliability or GOWOD), then the hip mini-block at 9:15. No TheStack training session today.</Text>
               <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => go("assess")} />
             </Section>
@@ -1156,12 +1506,16 @@ export default function App() {
 
           <Section heading="Streaks">
             <Metrics metrics={[
-              { value: `${dayStreak}`, label: "Day streak", detail: "Days with 70% or more done" },
-              { value: `${mobStreak}`, label: "Mobility streak", detail: "Days in a row" },
-              { value: `${bedStreak}`, label: "Bed by 10 streak", detail: "Nights in a row" },
+              { value: `${dayStreak}`, label: "Day streak", detail: `Minimum or 25%+ done · ${dayInfo.last14} of last 14 days` },
+              { value: `${mobStreak}`, label: "Mobility streak", detail: "Never-miss-twice chain" },
+              { value: `${bedStreak}`, label: "Bed by 10 streak", detail: "Never-miss-twice chain" },
               { value: `${drillStreak}`, label: "Drill streak", detail: "Drill days with at least one drill ticked" },
             ]} />
-            {checkInDays > 0 && <Text>{`${checkInDays} check-in days logged so far. A missed day resets a streak, not your progress.`}</Text>}
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "12px 14px", borderRadius: 14, background: "var(--bg)" }}>
+              <span style={{ color: "var(--text2)", paddingTop: 1, flex: "0 0 auto" }}>{I("shield", 18)}</span>
+              <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{`Never miss twice: one missed day keeps the chain, two in a row end it. Weekly freeze: ${dayInfo.freezeLeft ? "ready (auto-covers a second miss)" : "used this week"}.`}</div>
+            </div>
+            {checkInDays > 0 && <Text>{`${checkInDays} check-in days logged so far.`}</Text>}
           </Section>
 
           {weekHasData && <Section heading="This week, % of checklist done"><Columns points={weekPoints} emphasis={mondayOffset} /></Section>}
@@ -1192,17 +1546,53 @@ export default function App() {
               <Bar value={fracOf(dailyItems)} color={DAILY_ACCENT} track="rgba(255,255,255,0.16)" />
             </div>
           </div>
+          {nextTask && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}><NextChip label={nextShort(nextTask)} mins={(nextTask.s - hourNow) * 60} />{currentBlock && <Chip icon={I("timer", 13)} label={`Now: ${Math.max(0, Math.round((currentBlock.e - hourNow) * 60))} min left`} />}</div>}
+          {kindCard}
           {isTestingDay && (
-            <Section heading="Testing Day today">
+            <Section heading="Boss Challenge: Testing Day">
               <Text>Only the 5-min warm-up this morning, then the tests at 6:30. Mobility score at 9:00 AM (Pliability or GOWOD), then the hip mini-block at 9:15. No TheStack training session today.</Text>
               <Button variant="primary" label="Open Testing Day on the Tests tab" onClick={() => go("assess")} />
             </Section>
           )}
 
           <Section heading="Daily habits">
-            <TapList items={dailyItems} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} />
+            <TapList items={dailyItems} onTap={toggle} onOpenMobility={isTestingDay ? undefined : () => openStretch()} {...minProps} />
+            <div style={{ display: "grid", gap: 0, marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.4, color: "var(--text3)", textTransform: "uppercase", padding: "6px 0 2px" }}>Optional</div>
+              {EXTRAS.map((x, i) => <TapItem key={x.id} first={i === 0} label={x.label} done={!!extraDone[x.id]} onTap={() => toggleExtra(x.id)} />)}
+            </div>
+          </Section>
+          <Section heading="If-then plans" caption="Decide once, then the plan decides for you.">
+            {ifEdit ? (
+              <Fragment>
+                {ifLines.map((l, i) => <Input key={i} label={`Plan ${i + 1}`} value={l} onChange={(v) => setIfLine(i, v)} />)}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button variant="primary" label="Done" onClick={() => setIfEdit(false)} />
+                  <Button label="Reset to defaults" onClick={() => setStore((s) => ({ ...s, ifThen: [...IF_THEN_DEFAULT] }))} />
+                </div>
+              </Fragment>
+            ) : (
+              <Fragment>
+                <div style={{ display: "grid", gap: 0, marginTop: -6 }}>
+                  {ifLines.map((l, i) => { const m = /^(If .*?),\s*(then .*|the .*)$/i.exec(l); return (
+                    <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i ? "1px solid var(--border)" : "none", fontSize: 13.5, lineHeight: "19px" }}>
+                      <span style={{ flex: "0 0 22px", height: 22, borderRadius: 11, background: "var(--fill2)", color: "var(--text2)", fontSize: 11.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", marginTop: -1 }}>{i + 1}</span>
+                      <span>{m ? <Fragment><span style={{ color: "var(--text3)" }}>{m[1]},</span>{" "}<span style={{ color: "var(--text)", fontWeight: 500 }}>{m[2]}</span></Fragment> : l}</span>
+                    </div>
+                  ); })}
+                </div>
+                <button onClick={() => setIfEdit(true)} style={{ justifySelf: "start", height: 36, padding: "0 14px", borderRadius: 999, border: "none", background: "var(--fill2)", color: "var(--text)", fontSize: 13.5, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I("edit", 14)}Edit plans</button>
+              </Fragment>
+            )}
           </Section>
           <div id="timer" style={{ scrollMarginTop: 12 }} />
+          {!isTestingDay && (
+            <MinPanel title="Mobility today" mode={modeOf("mobility")} onMode={(m) => setMode("mobility", m)} text={MINIMUMS.mobility} done={!!rec.c.mobility} minDone={minDoneOf("mobility")} onDoneMin={() => doneMin("mobility")} doneLabel="Done: minimum mobility">
+              <StretchPlayer key="minplayer" moves={MIN_MOVES} done={Object.fromEntries(MIN_MOVES.map((m) => [m.id, !!(rec.stretch && rec.stretch[`min:${m.id}`])]))} onSet={(id, v) => setMinMove(id, v)} />
+            </MinPanel>
+          )}
+          {modeOf("mobility") === "min" && !isTestingDay ? null : (
+          <Fragment>
 
           <Section heading="Pick a routine">
             <Segmented<RoutineKey> options={[{ value: "daily", label: liftDay ? "Daily · 18 min" : "Daily · 20 min" }, { value: "warmup", label: "Warm-up · 5" }, { value: "sunday", label: "Sunday · 26" }]} value={routine === "dailylift" ? "daily" : routine} onChange={(v) => setRoutine(v)} />
@@ -1219,8 +1609,11 @@ export default function App() {
             </Section>
           )}
           <Section heading={`${ROUTINES[effRoutine].label} · ${stretchDoneN} of ${ROUTINES[effRoutine].moves.length} done`}>
+            {stretchDoneN === ROUTINES[effRoutine].moves.length && <CapNote text="All moves done. Next up is the 4-min hip mini-block, then you're finished with mobility." />}
             <StretchPlayer key={effRoutine} moves={ROUTINES[effRoutine].moves} done={stretchDone} onSet={(id, v) => setStretch(effRoutine, id, v)} />
           </Section>
+          </Fragment>
+          )}
           {limited.length > 0 && <Section heading="Extra focus from your last test"><Table columns={["Limited screen", "Give these extra time"]} rows={limited.map((s) => [s.name, s.fix])} align={["start", "start"]} /></Section>}
           <Section heading="Mobility routines (print version)" collapsible defaultOpen={false}>
             <Section heading={`Daily mobility + strength · ${fmtRange(ROUTINES.daily.start, ROUTINES.daily.start + routineSecs("daily") / 3600)}`}><Table columns={["Time", "Move", "Sets x reps", "Cue"]} rows={stretchRows("daily", ROUTINES.daily.start)} /></Section>
@@ -1254,9 +1647,10 @@ export default function App() {
           <Hero photo={PHOTO.bunker} height={240} position="50% 40%" fade={false}>
             <HeroTitle title="Workouts" sub={workItems.length ? `${workItems.filter((i) => i.done).length} of ${workItems.length} ${workItems.length === 1 ? "session" : "sessions"} done today` : "No main session today: mobility and hips only"} />
           </Hero>
-          {workItems.length > 0 && <Section heading="Today's sessions"><TapList items={workItems} onTap={toggle} /></Section>}
+          {easeText && <EaseNote text={easeText} />}
+          {workItems.length > 0 && <Section heading="Today's sessions"><TapList items={workItems} onTap={toggle} {...minProps} /></Section>}
           <SectionTitle>Today</SectionTitle>
-          {todayWorkouts.map((w) => { const n = w.s.items.length; const d = wDoneN(w); return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : undefined} chips={[`${Math.round(sessMin(w.s as any))} min`, `${n} exercises`]} lines={[w.when]} value={d / n} progressLabel={`${d}/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
+          {todayWorkouts.map((w) => { const n = w.s.items.length; const d = wDoneN(w); const mt = w.key && (w.id === "strA" ? MINIMUMS.strengthA : w.id === "strB" ? MINIMUMS.strengthB : w.id === "stack" ? MINIMUMS.speed : w.id === "hipmini" ? MINIMUMS.hipmini : w.id === "hipblock" || w.id === "primer" ? MINIMUMS.hips : undefined); return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : w.key && minDoneOf(w.key) ? "Minimum done" : undefined} chips={[`${Math.round(sessMin(w.s as any))} min`, `${n} exercises`]} lines={mt ? [w.when, `Minimum: ${mt}`] : [w.when]} value={w.key && rec.c[w.key] ? 1 : d / n} progressLabel={`${d}/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
           <SectionTitle>All workouts</SectionTitle>
           {otherWorkouts.map((w) => { const n = w.s.items.length; return <WorkoutCard key={w.id} title={w.title} badge={w.optional ? "Optional" : undefined} chips={[`${Math.round(sessMin(w.s as any))} min`, `${n} exercises`]} lines={[w.when]} value={0} progressLabel={`0/${n}`} thumb={wThumb(w)} fallback={w.fallback} onClick={() => { setDetail(w.id); setOpenEx(null); }} />; })}
           {workDrillsToday.length > 0 && (
@@ -1281,6 +1675,42 @@ export default function App() {
               {d > 0 && <Chip icon={I("check", 13, 2.5)} label={`${d}/${n} done`} tone="ink" />}
             </div>
             {pi === null && <GoalText text={w.s.goal} />}
+            {pi === null && (() => {
+              const k = w.key as CheckKey | undefined;
+              const mt = w.id === "strA" ? MINIMUMS.strengthA : w.id === "strB" ? MINIMUMS.strengthB : w.id === "stack" ? MINIMUMS.speed : w.id === "hipmini" ? MINIMUMS.hipmini : w.id === "hipblock" || w.id === "primer" ? MINIMUMS.hips : undefined;
+              const md = k ? modeOf(k) : "full";
+              const isMin = !!(k && mt && md === "min");
+              const totalMin = isMin ? MIN_MINUTES[k as string] || 10 : sessMin(w.s as any);
+              const tItems = isMin ? [{ name: `Minimum: ${mt}`, min: totalMin }] : w.s.items.map((e) => ({ name: e.name, min: e.min }));
+              const doneAll = !!(k && rec.c[k]) || d === n;
+              return (
+                <Fragment>
+                  {k && mt && (
+                    <MinPanel mode={md} onMode={(m) => setMode(k, m)} text={mt} done={!!rec.c[k]} minDone={minDoneOf(k)} onDoneMin={w.id === "stack" ? undefined : () => doneMin(k)} doneLabel="Done: minimum">
+                      {w.id === "stack" && !rec.c[k] && (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input value={minSpeedDraft} inputMode="decimal" placeholder={`Best of 5 (mph)`} aria-label="Best of the 5 swings (mph)" onChange={(e) => setMinSpeedDraft(e.target.value)} style={{ flex: 1, minWidth: 0, minHeight: 48, padding: "0 14px", borderRadius: 14, border: "none", background: "var(--fill2)", color: "var(--text)", fontSize: 16 }} />
+                          <button onClick={() => { if (logSpeed(minSpeedDraft, "Minimum: 5 max-intent swings")) { setMinSpeedDraft(""); doneMin("speed"); } }} style={{ minHeight: 48, padding: "0 18px", borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 15, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>Log + done</button>
+                        </div>
+                      )}
+                    </MinPanel>
+                  )}
+                  {wIsToday(w) && !doneAll && <SessionTimer items={tItems} totalMin={totalMin} startedAt={timerStart && timerStart.id === w.id ? timerStart.at : null} onStart={() => setTimerStart({ id: w.id, at: Date.now() })} onStop={() => setTimerStart(null)} />}
+                  {doneAll && wIsToday(w) && <CapNote text={isMin || (k && minDoneOf(k)) ? "Minimum done, and it counts. Stop here, or add more only if it feels good." : "Planned volume is done. More today won't add speed; recovery will."} />}
+                  {w.id === "stack" && (
+                    <div style={{ ...CARD, padding: 16, display: "grid", gap: 10 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600 }}>Swing count</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <Input label="Swings done" type="number" value={rec.swings ? String(rec.swings) : ""} placeholder="0" onChange={(v) => { const x = Number(v); patchDay((cur) => ({ ...cur, swings: v && !isNaN(x) ? x : undefined })); }} />
+                        <Input label="Planned (TheStack app)" type="number" value={String(stackPlan)} onChange={(v) => { const x = Number(v); setUi({ ...ui, stackPlan: v && !isNaN(x) && x > 0 ? x : undefined }); }} />
+                      </div>
+                      {swingsOver ? <EaseNote text={easeText} /> : <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{`Cap: about ${Math.round(stackPlan * 1.2)} swings. Past that, speed work turns into fatigue.`}</div>}
+                    </div>
+                  )}
+                  {!wIsToday(w) && !w.optional && !w.testing && d > 0 && <EaseNote text={`${w.title} isn't on today's plan. Hyperfocus is a strength, but extra sessions don't add speed. Suggest rest.`} />}
+                </Fragment>
+              );
+            })()}
             {pi !== null && pe && (
               <Section heading={`Exercise ${pi + 1} of ${n}: ${pe.name}`}>
                 <Properties items={[{ label: "Sets x reps", value: pe.dose }, { label: "Rest", value: pe.rest }, { label: "Load + cues", value: pe.load }]} />
@@ -1309,7 +1739,7 @@ export default function App() {
           </div>
           {pi === null && (
             <div style={{ position: "fixed", left: 0, right: 0, bottom: `calc(${NAV_BOTTOM} + ${NAV_H + 10}px)`, zIndex: 40, padding: "0 24px", pointerEvents: "none" }}>
-              <button onClick={() => { const f = w.s.items.findIndex((_e, i) => !wRowDone(w, i)); setPlayer(f < 0 ? 0 : f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ pointerEvents: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", maxWidth: 420, margin: "0 auto", minHeight: 54, borderRadius: 27, border: "none", background: "var(--accent)", color: "#fff", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 24px rgba(30,158,98,0.32)", cursor: "pointer" }}>{I("play", 14)}{d === 0 ? "Start" : d < n ? "Continue" : "Start again"}</button>
+              <button onClick={() => { const f = w.s.items.findIndex((_e, i) => !wRowDone(w, i)); setPlayer(f < 0 ? 0 : f); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ pointerEvents: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", maxWidth: 420, margin: "0 auto", minHeight: 54, borderRadius: 27, border: "none", background: "var(--accent)", color: "#fff", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 24px rgba(30,158,98,0.32)", cursor: "pointer" }}>{I("play", 14)}{d === 0 ? "Start workout" : d < n ? "Continue" : "Start again"}</button>
             </div>
           )}
         </Fragment>
@@ -1324,9 +1754,34 @@ export default function App() {
             <StatCard icon="gauge" label="Swing speed" value={`${lastSpeed}`} unit="mph" detail={`Best ${bestSpeed || lastSpeed} · goal 110`} />
             <StatCard icon="target" label="Wedge hits" value={wedgeHist.length ? `${wPct(wedgeHist[wedgeHist.length - 1])}%` : "-"} detail={wedgeHist.length ? `Last: Ladder ${wedgeHist[wedgeHist.length - 1].ladder}` : `Next: Ladder ${nextLadder}`} />
           </div>
-          {golfItems.length > 0 && <Section heading="Today's golf"><TapList items={golfItems} onTap={toggle} /></Section>}
+          {bossCard}
+          {golfItems.length > 0 && <Section heading="Today's golf"><TapList items={golfItems} onTap={toggle} {...minProps} /></Section>}
+          <Section heading={`Block ${rot.num} bonus games`} caption={`3-week rotation · day ${rot.dayInBlock} of 21 · the core ladders stay the same, the bonus game changes`}>
+            {newBlock && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 16, background: "var(--accent-subtle)" }}>
+                <span style={{ color: "var(--accent)" }}>{I("spark", 20)}</span>
+                <div style={{ flex: 1, fontSize: 14, lineHeight: "19px" }}><b>New block unlocked.</b> Fresh bonus games for the next 3 weeks.</div>
+                <button onClick={() => setUi({ ...ui, seenBlock: rot.idx })} style={{ height: 32, padding: "0 12px", borderRadius: 999, border: "none", background: "var(--ink)", color: "var(--on-ink)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Got it</button>
+              </div>
+            )}
+            {[{ tag: "Wedges", g: rot.wedge }, { tag: "Putting", g: rot.putt }].map((x) => (
+              <div key={x.tag} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <IconDot name={x.tag === "Wedges" ? "target" : "golf"} tone="soft" size={36} />
+                <div style={{ flex: 1, display: "grid", gap: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{`${x.tag} bonus · after the core session`}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{x.g.name}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{x.g.how}</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize: 12.5, color: "var(--text3)" }}>{`Next block starts ${shortDate(iso(rot.nextStart))}.`}</div>
+          </Section>
+          {plan.checks.indexOf("wedges") >= 0 && (
+            <MinPanel title="Wedges today" mode={modeOf("wedges")} onMode={(m) => setMode("wedges", m)} text={`10-ball mini-ladder: 2 balls each at ${WEDGE_LADDERS[wedgeRec.ladder].targets.slice(-5).join(", ")} yd (Ladder ${wedgeRec.ladder}).`} done={!!rec.c.wedges} minDone={minDoneOf("wedges")} onDoneMin={() => doneMin("wedges")} doneLabel="Done: 10-ball mini-ladder" />
+          )}
           {plan.checks.indexOf("wedges") >= 0 && (
             <Section heading={`Wedge ladder ${wedgeRec.ladder} · 30 min`} caption={`Alternates A/B each session (last: ${wedgePrev ? `${wedgePrev.ladder} on ${shortDate(wedgePrev.date)}` : "none yet, so A first"}). 5 min warm-up, then 30 shots. Hit = carry within 10% of the target.`}>
+              {wedgeShotsN >= wedgeTotal && <CapNote text="30 shots done. Save the session and stop here; the bonus game is optional." />}
               <WedgeCounter rec={wedgeRec} canSwitch={true} onShot={wedgeShot} onUndo={wedgeUndo} onSwitch={wedgeSwitch} onFinish={wedgeFinish} />
             </Section>
           )}
@@ -1360,6 +1815,9 @@ export default function App() {
             </Section>
           )}
           <Section heading="Log swing speed" caption="TheStack or Rapsodo max club speed (mph)">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {milestoneHits.map((h) => <Chip key={h.m} icon={h.date ? I("check", 12, 2.5) : undefined} tone={h.date ? "ink" : "soft"} label={h.date ? `${h.m} mph · ${shortDate(h.date)}` : `${h.m} mph`} />)}
+            </div>
             <Input label="Club speed (mph)" type="number" value={speedDraft} placeholder={`${lastSpeed}`} onChange={(v) => setSpeedDraft(v)} />
             <Button variant="primary" label="Save speed" onClick={addSpeed} />
             {speedLogs.length >= 2 && <LineChart points={lineFrom(speedLogs)} floor={Math.min(90, ...speedLogs.map((l) => l.value))} ceiling={Math.max(112, ...speedLogs.map((l) => l.value))} unit="mph" labels={["Club speed"]} secondary={{ label: "Goal 110", values: speedLogs.map(() => 110) }} format={(v) => `${v} mph`} />}
@@ -1375,6 +1833,8 @@ export default function App() {
       {nav === "more" && tab === "menu" && (
         <Fragment>
           <ScreenTitle title="More" sub="Plan, history, tests and settings" />
+          <MenuRow icon="award" title="Badge shelf" sub={`${(store.badges || []).length} of ${BADGES.length} badges · level ${lvl.cur.name} · ${xp.toLocaleString()} XP`} onClick={() => setTab("badges")} />
+          <MenuRow icon="bulb" title="Why it works" sub="The ADHD-friendly principles behind the app" onClick={() => setTab("why")} />
           <MenuRow icon="calendar" title="Weekly plan" sub="Every day, minute by minute" onClick={() => setTab("plan")} />
           <MenuRow icon="trend" title="12 weeks" sub="Phases + progression rules" onClick={() => setTab("phases")} />
           <MenuRow icon="note" title="Log + backup" sub="Speed, lifts, scores, wedges, export/import, credits" onClick={() => setTab("log")} />
@@ -1387,6 +1847,55 @@ export default function App() {
         </Fragment>
       )}
       {nav === "more" && tab !== "menu" && <ScreenTitle title={moreTitles[tab] || "More"} onBack={() => setTab("menu")} />}
+      {nav === "more" && tab === "badges" && (() => {
+        const owned: Record<string, string> = {}; (store.badges || []).forEach((b) => { owned[b.id] = b.date; });
+        const bonusIds = Array.from(new Set((store.rewards || []).filter((r) => r.kind === "bonus").map((r) => r.id)));
+        return (
+          <Fragment>
+            <Section heading={`Level ${lvl.cur.name}`} caption="Levels are named after speed milestones but go up with XP: show up, log numbers, finish sessions.">
+              <Bar value={lvl.frac} height={8} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--text3)" }}><span>{`${xp.toLocaleString()} XP`}</span><span>{lvl.next ? `${lvl.toNext.toLocaleString()} to ${lvl.next.name}` : "Top level"}</span></div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{LEVELS.map((l, i) => <Chip key={l.name} tone={i <= lvl.idx ? "ink" : "soft"} label={`${l.name} · ${l.xp.toLocaleString()}`} />)}</div>
+              <Text>{`XP: ${XP.item} per checklist item, ${XP.full} for a Full session (double), ${XP.min} for a Minimum, +${XP.log} for logging a number, +${XP.test} for Testing Day results, +${XP.pr} for a speed PR.`}</Text>
+            </Section>
+            <Section heading={`Badges · ${Object.keys(owned).length} of ${BADGES.length}`} caption="Badges drop at random when you finish a session (about 4 in 10 sessions bring a surprise).">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
+                {BADGES.map((b) => { const got = !!owned[b.id]; return (
+                  <div key={b.id} style={{ borderRadius: 16, background: "var(--bg)", padding: 14, display: "grid", gap: 8, opacity: got ? 1 : 0.45 }}>
+                    <IconDot name={b.icon} tone={got ? "ink" : "soft"} size={38} />
+                    <div style={{ fontSize: 14, fontWeight: 600, lineHeight: "18px" }}>{b.name}</div>
+                    <div style={{ fontSize: 12, lineHeight: "16px", color: "var(--text3)" }}>{got ? `${b.desc} · ${shortDate(owned[b.id])}` : "Locked"}</div>
+                  </div>
+                ); })}
+              </div>
+            </Section>
+            {bonusIds.length > 0 && (
+              <Section heading="Bonus drills you've unlocked">
+                {bonusIds.map((id) => { const g = BONUS_GAMES.find((x) => x.id === id); return g ? <div key={id} style={{ display: "grid", gap: 2 }}><div style={{ fontSize: 15, fontWeight: 600 }}>{g.name}</div><div style={{ fontSize: 13.5, lineHeight: "19px", color: "var(--text2)" }}>{g.how}</div></div> : null; })}
+              </Section>
+            )}
+          </Fragment>
+        );
+      })()}
+      {nav === "more" && tab === "why" && (
+        <Fragment>
+          <Section heading="Why it works" caption="The plan is the same. These features make it easier to start, keep going and stop on time.">
+            <Steps steps={[
+              { title: "Small wins, right away", detail: "XP, levels and a surprise reward now and then give your brain a payoff today, not in 12 weeks." },
+              { title: "Never miss twice", detail: "Missing one day barely dents a habit. Two in a row starts a new pattern, so the streak only ends there, and a weekly freeze covers one more." },
+              { title: "Minimum days count", detail: "On low days the 5-10 minute version keeps the chain and the habit alive. Showing up beats a perfect session you skip." },
+              { title: "If-then plans", detail: "Deciding in advance (if X, then Y) makes starting automatic, which helps with the start-up friction ADHD brings." },
+              { title: "Visible time", detail: "ADHD changes how time feels. Rings, countdowns and 'Next in 20 min' make time something you can see." },
+              { title: "Hyperfocus caps", detail: "Locking in is a strength, but extra volume costs recovery. The timer and 'stop here' notes end sessions on plan." },
+              { title: "Exercise helps focus", detail: "Exercise is linked to better attention and executive function in adults with ADHD, so the morning session helps the rest of the day too." },
+              { title: "Sleep, daylight, phone away", detail: "Sleep problems are common with ADHD. Morning daylight and the phone off the nightstand support the 10:00 bedtime." },
+              { title: "Self-compassion over guilt", detail: "Being kind to yourself after a slip is linked to better wellbeing in adults with ADHD, and makes restarting easier than guilt does." },
+            ]} />
+            <Callout tone="info">If you take ADHD medication, ask your doctor about timing around hard speed sessions, rounds and heat.</Callout>
+          </Section>
+          <Section heading="Sources"><LinkCards links={WHY_SOURCES} /></Section>
+        </Fragment>
+      )}
       {nav === "more" && tab === "settings" && (
         <Fragment>
           <Section heading="Your name">
@@ -1664,6 +2173,7 @@ export default function App() {
         </Fragment>
       )}
       </main>
+      {toasts.length > 0 && <Toast key={toasts.length + toasts[0].title} t={toasts[0]} onClose={() => setToasts((q) => q.slice(1))} />}
       {nameSheet && (
         <div role="dialog" aria-modal="true" aria-label="Your name" onClick={() => setNameSheet(false)} style={{ position: "fixed", inset: 0, zIndex: 100, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
           <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); setUi({ ...ui, name: nameDraft.trim() }); setNameSheet(false); }} style={{ width: "100%", maxWidth: 520, background: "var(--card)", color: "var(--text)", borderRadius: "28px 28px 0 0", padding: "12px 20px calc(env(safe-area-inset-bottom) + 20px)", display: "grid", gap: 16, boxShadow: "0 -8px 30px rgba(0,0,0,0.2)" }}>
