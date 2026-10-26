@@ -695,8 +695,8 @@ function EaseNote(props: { text: string }) {
 /** "Next: X in Y min" chip. */
 function NextChip(props: { label: string; mins: number; dark?: boolean }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", height: 30, padding: "0 12px", borderRadius: 999, background: props.dark ? "rgba(255,255,255,0.12)" : "var(--fill2)", color: props.dark ? "#fff" : "var(--text2)", fontSize: 12.5, fontWeight: 500 }}>
-      {I("clock", 13)}<span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{`Next: ${props.label} in ${fmtIn(props.mins)}`}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 30, padding: "5px 12px", borderRadius: 15, background: props.dark ? "rgba(255,255,255,0.12)" : "var(--fill2)", color: props.dark ? "#fff" : "var(--text2)", fontSize: 12.5, lineHeight: "17px", fontWeight: 500 }}>
+      {I("clock", 13)}<span>{`Next: ${props.label} in `}<b style={{ fontWeight: 600, color: props.dark ? "#fff" : "var(--text)", whiteSpace: "nowrap" }}>{fmtIn(props.mins)}</b></span>
     </span>
   );
 }
