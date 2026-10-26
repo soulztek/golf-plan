@@ -3,12 +3,12 @@ const dist = path.resolve("dist");
 const files = [];
 (function walk(d){ for (const f of fs.readdirSync(d)) { const p = path.join(d,f); if (fs.statSync(p).isDirectory()) walk(p); else files.push("./" + path.relative(dist,p).split(path.sep).join("/")); } })(dist);
 const list = files.filter(f => f !== "./sw.js");
-const APP_VERSION = "v10-adhd";
+const APP_VERSION = "v11";
 const version = "golfplan-" + APP_VERSION + "-" + Date.now();
 const sw = `const CACHE = ${JSON.stringify(version)};
 const ASSETS = ${JSON.stringify(["./", ...list], null, 0)};
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())); });
-self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener("activate", (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith("golfplan-") && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
