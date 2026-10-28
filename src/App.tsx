@@ -1055,6 +1055,10 @@ const WORKOUTS: Workout[] = [
 interface UiPrefs { name?: string; dark?: boolean; seenBlock?: number; kindSeen?: string; stackPlan?: number; }
 function loadUi(): UiPrefs { try { return JSON.parse(window.localStorage.getItem(UI_KEY) || "{}"); } catch (_e) { return {}; } }
 
+import { useCloud } from "./sync/cloud";
+import { AccountCard } from "./sync/AccountCard";
+import { mergeGolfStores } from "./sync/merge";
+
 export default function App() {
   const initial = useMemo(() => loadStore(), []);
   const [store, setStore] = useState<Store>(initial.store);
@@ -1066,6 +1070,8 @@ export default function App() {
   const [player, setPlayer] = useState<number | null>(null);
   const [openEx, setOpenEx] = useState<number | null>(null);
   const [ui, setUi] = useState<UiPrefs>(loadUi());
+  // Optional cloud sync (More › Settings › Account). Local-first; all golf data is private to you.
+  const cloud = useCloud("golf", store, ui, (s, u) => { setStore(s); setUi(u); }, normalize, (u: any) => (u && typeof u === "object" ? u : {}), { mergeStore: mergeGolfStores, household: false });
   const [toasts, setToasts] = useState<any[]>([]);
   const [timerStart, setTimerStart] = useState<{ id: string; at: number } | null>(null);
   const [ifEdit, setIfEdit] = useState<boolean>(false);
@@ -1842,7 +1848,7 @@ export default function App() {
           <MenuRow icon="food" title="Food" sub="Protein, water, meal timing" onClick={() => setTab("food")} />
           <MenuRow icon="book" title="Drills + how-to" sub="All drills, demos, scores" onClick={() => setTab("drills")} />
           <MenuRow icon="clock" title="Full day view" sub="Right now, timeline, full checklist" onClick={() => setTab("today")} />
-          <MenuRow icon="settings" title="Settings" sub="Your name, dark mode" onClick={() => setTab("settings")} />
+          <MenuRow icon="settings" title="Settings" sub={cloud.session ? `${cloud.email} · name, dark mode` : "Sign in to sync, name, dark mode"} onClick={() => setTab("settings")} />
           <MenuRow icon="info" title="Credits + licenses" sub="Demo images and videos" onClick={() => setTab("log")} />
         </Fragment>
       )}
@@ -1898,6 +1904,7 @@ export default function App() {
       )}
       {nav === "more" && tab === "settings" && (
         <Fragment>
+          <AccountCard cloud={cloud} appName="Golf Speed Plan" privateNote="Your streaks, XP, speed logs and tests upload on first sign-in, nothing is lost. Golf data is private to you." />
           <Section heading="Your name">
             <Input label="Shown on Home as 'Hi, ...'" value={ui.name || ""} placeholder="Golfer" onChange={(v) => setUi({ ...ui, name: v })} />
           </Section>
@@ -1905,7 +1912,7 @@ export default function App() {
             <Segmented<string> options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} value={ui.dark ? "dark" : "light"} onChange={(v) => setUi({ ...ui, dark: v === "dark" })} />
           </Section>
           <Section heading="About">
-            <Text>Your plan data stays on this phone (Log + backup to export). Name and theme are stored separately and never touch your check-ins.</Text>
+            <Text>{cloud.session ? "Your plan data is saved on this phone and synced privately to your account (only you can read it). Log + backup still exports a file." : "Your plan data stays on this phone (Log + backup to export). Sign in above to back it up and sync it privately."}</Text>
           </Section>
         </Fragment>
       )}

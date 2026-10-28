@@ -3,7 +3,20 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "scripts": { "build": "vite build && node scripts/gen-sw.mjs", "preview": "vite preview --port 4173" },
-  "dependencies": { "react": "^18.3.1", "react-dom": "^18.3.1" },
-  "devDependencies": { "vite": "^5.4.10", "@vitejs/plugin-react": "^4.3.3", "typescript": "^5.6.3" }
+  "scripts": {
+    "build": "vite build && node scripts/gen-sw.mjs",
+    "preview": "vite preview --port 4173",
+    "test": "esbuild tests/streak.test.ts --bundle --platform=node --outfile=node_modules/.cache/streak.test.cjs --log-level=warning && node node_modules/.cache/streak.test.cjs && esbuild tests/sync.test.ts --bundle --platform=node --outfile=node_modules/.cache/sync.test.cjs --log-level=warning && node node_modules/.cache/sync.test.cjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "esbuild": "^0.28.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
 }
